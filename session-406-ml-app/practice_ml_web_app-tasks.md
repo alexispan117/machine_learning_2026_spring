@@ -93,5 +93,7 @@ You can examine these legacy files from the repository to understand the origina
 
 Check out these historical repositories from past students to see different approaches to the assignment:
 
-* [Student Project Reference 1 (EmelinePer)]()
-* [Student Project Reference 2 (EmporioSabo)]()
+* [Student Project Reference 1 (EmelinePer)](https://github.com/EmelinePer/Practice_5)
+* [Student Project Reference 2 (EmporioSabo)](https://github.com/EmporioSabo/MNIST-Digit-Recognizer)
+* https://github.com/EmporioSabo/UFO-Sighting-Predictor
+
