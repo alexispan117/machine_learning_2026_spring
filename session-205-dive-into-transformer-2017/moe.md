@@ -1,5 +1,6 @@
 # Mixture-of-Experts (MoE)
 
+![](./img-moe/moe.jpg)
 
 ---
 
