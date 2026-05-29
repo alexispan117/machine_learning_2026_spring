@@ -1,16 +1,5 @@
 # Mixture-of-Experts (MoE)
 
----
-
-## Learning Objectives
-
-After this lecture, students should be able to:
-
-* Understand why Mixture-of-Experts was introduced
-* Explain the difference between dense models and sparse models
-* Understand experts, routers, and top-$k$ selection
-* Compute parameter counts in MoE systems
-* Explain why MoE increases model capacity without activating all parameters
 
 ---
 
@@ -219,9 +208,7 @@ In dense models:
 
 $$
 \text{Stored Parameters}
-========================
-
-\text{Active Parameters}
+=\text{Active Parameters}
 $$
 
 In MoE:
@@ -241,8 +228,6 @@ How many parameters exist in memory?
 ### Activated Parameters
 
 How many parameters execute for one token?
-
-Students frequently confuse these concepts.
 
 > [!WARNING]
 > In MoE systems, inactive experts still consume memory because their weights must remain available for future routing decisions.
