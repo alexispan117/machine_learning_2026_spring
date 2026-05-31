@@ -1,81 +1,133 @@
-#  DBSCAN: Density-Based Clustering
+# DBSCAN
 
-## 1. Motivation: When K-Means Fails
-
-Recall K-Means assumes clusters are **round** and tries to assign points based on **distance to a centroid**.
-
-**Problem:**
-
-* What if clusters are **curved**, like moons or spirals?
-* What if there are **outliers/noisy points**?
-
-K-Means will slice through clusters incorrectly.
-
-**Solution:** Use **DBSCAN (Density-Based Spatial Clustering of Applications with Noise)**, which groups points based on **density, not distance to a center**.
-
----
-
-## 2. Intuition: Finding Crowds in a Park
+DBSCAN is a density-based clustering method. It finds connected dense regions and marks isolated points as noise.
 
 ![](./img-embedding/dbscan.gif)
 
+---
 
-Imagine standing in a park:
+## 1. Motivation: When Centroids Are the Wrong Tool
 
-1. A person with many neighbors nearby is part of a **crowd** (core point).
-2. People connected to the crowd via neighbors also belong to the same cluster.
-3. People standing alone, far from everyone else, are **noise/outliers**.
+K-means and GMMs describe clusters using centers. That works for compact groups, but it can fail when the structure is curved, irregular, or contaminated by outliers.
 
-DBSCAN works by **growing clusters from dense regions**, naturally handling arbitrary shapes and outliers.
+DBSCAN asks a different question:
+
+> Which points belong to the same dense region?
+
+This lets it discover non-convex clusters and identify noise points.
 
 ---
 
-## 3. Key Concepts of DBSCAN
+## 2. Parameters
 
-| Concept               | Description                                                                       |
-| --------------------- | --------------------------------------------------------------------------------- |
-| **Core Point**        | A point with at least `min_samples` neighbors within radius `eps`.                |
-| **Border Point**      | A point within `eps` of a core point but with fewer than `min_samples` neighbors. |
-| **Noise Point**       | A point that is neither core nor border.                                          |
-| **Cluster Formation** | Connect core points and their reachable neighbors recursively.                    |
+DBSCAN has two main hyperparameters:
 
-**Parameters:**
+- $\epsilon$: neighborhood radius.
+- $m$: minimum number of points required to form a dense neighborhood.
 
-* `eps`: Radius to search for neighbors (defines "density")
-* `min_samples`: Minimum points to form a dense region
+For a point $x^{(i)}$, define its $\epsilon$-neighborhood as:
 
-> Choosing `eps` and `min_samples` carefully is essential for meaningful clusters.
+$$
+N_{\epsilon}(x^{(i)})
+=
+\left\{
+x^{(j)}
+:
+\left\|x^{(j)} - x^{(i)}\right\|_2 \le \epsilon
+\right\}
+$$
+
+The size of this neighborhood is $\left|N_{\epsilon}(x^{(i)})\right|$.
 
 ---
 
-## 4. Pseudocode for DBSCAN
+## 3. Core, Border, and Noise Points
 
 ![](./img-embedding/dbscan2.gif)
 
+DBSCAN classifies points into three types.
+
+| Type | Definition | Meaning |
+| --- | --- | --- |
+| Core point | $\left\|N_{\epsilon}(x^{(i)})\right\| \ge m$ | Point lies inside a dense region |
+| Border point | Not core, but within $\epsilon$ of a core point | Point lies on the edge of a dense region |
+| Noise point | Neither core nor border | Point is treated as an outlier |
+
+Clusters are formed by connecting core points that are reachable through chains of nearby core points, then adding border points around them.
+
+---
+
+## 4. Algorithm
 
 ```text
-Input: data points X, eps, min_samples
-Initialize all points as unvisited
+Input: data matrix X, radius epsilon, minimum count m
+Initialize every point as unvisited
 
-for each unvisited point P in X:
-    mark P as visited
-    neighbors = points within eps of P
-    
-    if len(neighbors) >= min_samples:
-        start a new cluster
-        add P to cluster
-        expand cluster recursively:
-            for each neighbor N:
-                if N not visited:
-                    mark N as visited
-                    neighbors_N = points within eps of N
-                    if len(neighbors_N) >= min_samples:
-                        add neighbors_N to neighbors list
-                if N not yet in any cluster:
-                    add N to cluster
+for each unvisited point:
+    mark it as visited
+    find its epsilon-neighborhood
+
+    if the neighborhood has fewer than m points:
+        mark the point as noise for now
     else:
-        mark P as noise
+        start a new cluster
+        recursively add all density-reachable points
 
-Output: clusters, noise points
+Output: clusters and noise points
 ```
 
+A point initially marked as noise can later become a border point if it is reached from a core point.
+
+---
+
+## 5. Choosing Parameters
+
+The parameter $\epsilon$ controls the scale of density.
+
+- If $\epsilon$ is too small, many points become noise.
+- If $\epsilon$ is too large, separate clusters merge.
+
+The parameter $m$ controls how strict the density requirement is.
+
+- Larger $m$ requires stronger local evidence.
+- Smaller $m$ allows smaller clusters but is more sensitive to noise.
+
+> [!INFO]
+> A common starting point is to inspect the sorted distance to each point's $m$-th nearest neighbor. A sharp bend can suggest a useful value of $\epsilon$.
+
+---
+
+## 6. Strengths and Limitations
+
+DBSCAN is strong when:
+
+- clusters have irregular shapes;
+- noise and outliers matter;
+- the number of clusters is unknown;
+- local density is meaningful.
+
+DBSCAN struggles when:
+
+- clusters have very different densities;
+- distance loses meaning in high dimensions;
+- $\epsilon$ is hard to choose;
+- the dataset is very large without efficient neighbor search.
+
+> [!WARNING]
+> DBSCAN does not remove the need for a good representation. It changes the clustering rule, but it still depends on meaningful neighborhoods.
+
+---
+
+## 7. Summary
+
+DBSCAN replaces centroids with density connectivity.
+
+The core idea is:
+
+$$
+\boxed{
+\text{dense neighborhoods connected by reachability become clusters}
+}
+$$
+
+This makes DBSCAN a useful alternative when cluster shape and outliers matter more than centroid interpretability.

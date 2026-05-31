@@ -1,152 +1,186 @@
 # Contrastive Learning
 
+Contrastive learning trains representations by comparing positive pairs against negative pairs.
+
 ![](./img-image/contrastive-learning.webp)
 
 ---
 
-## 1. Motivation: Learning without labels
+## 1. Motivation
 
-Traditional clustering tries to group data points directly in the input space. However, in high-dimensional data such as images and text, this often fails.
+In high-dimensional data, clustering raw inputs often fails because distance does not represent meaning.
 
-A more powerful idea is:
+Contrastive learning attacks the earlier problem at the representation level:
 
-First learn a good representation, then clustering becomes easy.
+$$
+\boxed{
+\text{learn an embedding space first, then use distance or similarity}
+}
+$$
 
-Contrastive learning is a core method for learning such representations without labels. It implicitly creates clusters by pulling similar samples together and pushing dissimilar ones apart.
+Instead of requiring class labels, contrastive learning builds a training signal from relationships between examples.
 
 ---
 
-## 2. Core idea: Similar vs dissimilar pairs
+## 2. Positive and Negative Pairs
 
 ![](./img-image/cl.jpg)
 
+The method depends on two types of pairs.
 
-Contrastive learning does not require explicit class labels. Instead, it relies on:
+| Pair Type | Meaning | Example |
+| --- | --- | --- |
+| Positive pair | Two views that should represent the same underlying item or concept | Two augmented crops of one image |
+| Negative pair | Two views treated as different | Views from different images |
 
-* Positive pairs: two views of the same underlying data point
-* Negative pairs: views from different data points
+The training goal is:
 
-Example:
+- pull positive embeddings together;
+- push negative embeddings apart.
 
-* Image: two augmented versions of the same image
-* Text: different contexts or augmentations of the same sentence
-
-The goal is:
-
-* maximize similarity between positive pairs
-* minimize similarity between negative pairs
+This creates structure in the embedding space.
 
 ---
 
-## 3. Representation space
+## 3. Encoder and Normalization
 
-Let an encoder $f_\theta(x)$ map input $x$ to a vector representation:
-
-$$
-z = f_\theta(x)
-$$
-
-Often followed by normalization:
+Let an encoder map an input to an embedding:
 
 $$
-|z| = 1
+z_i = f_{\theta}(x_i)
 $$
 
-Similarity is typically measured using cosine similarity:
+Often the embedding is normalized:
 
 $$
-\text{sim}(z_i, z_j) = z_i^\top z_j
+\bar{z}_i
+=
+\frac{z_i}{\|z_i\|_2}
 $$
+
+Then cosine similarity becomes a dot product:
+
+$$
+\operatorname{sim}(\bar{z}_i,\bar{z}_j)
+=
+\bar{z}_i \bar{z}_j^\top
+$$
+
+Normalization keeps the model from winning only by increasing vector norms.
 
 ---
 
-## 4. Contrastive loss (InfoNCE)
+## 4. InfoNCE Loss
 
 ![](./img-image/cl2.jpg)
 
-
-The most common objective is the InfoNCE (**Information Noise-Contrastive Estimation**) loss.
-
-Given:
-
-* an anchor $z_i$
-* a positive example $z_j$
-* a set of negatives $\{z_k\}$
-
-The loss is:
+Assume $i$ is an anchor and $j$ is its positive partner. In a batch of $B$ candidates, the InfoNCE loss is:
 
 $$
-\mathcal{L}_i = - \log \frac{\exp(\text{sim}(z_i, z_j) / \tau)}{\sum_{k=1}^{N} \exp(\text{sim}(z_i, z_k) / \tau)}
+\boxed{
+\mathcal{L}_i
+=
+-
+\log
+\frac{
+\exp(\operatorname{sim}(z_i,z_j)/\tau)
+}{
+\sum_{k=1}^{B}
+\exp(\operatorname{sim}(z_i,z_k)/\tau)
+}
+}
 $$
 
-where:
+where $\tau > 0$ is the temperature.
 
-* $\tau$ is a temperature parameter controlling sharpness
-* denominator includes both positive and negative samples
-
-Interpretation:
-
-* encourages $z_i$ to be close to $z_j$
-* pushes $z_i$ away from all other samples
+The numerator rewards the positive pair. The denominator compares the positive against competing examples.
 
 ---
 
-## 5. Connection to clustering
+## 5. Temperature
 
-Contrastive learning can be viewed as a form of soft clustering:
+The temperature $\tau$ controls how sharp the comparison is.
 
-* Each data point defines its own cluster (instance discrimination)
-* Positive pairs collapse into the same region
-* Negative samples define separation boundaries
+- Smaller $\tau$ makes the model focus strongly on the hardest distinctions.
+- Larger $\tau$ makes the distribution smoother.
 
-Over time:
-
-* semantically similar samples become close
-* clusters emerge naturally in embedding space
-
-This explains why downstream clustering (e.g., K-means) works well on learned embeddings.
+Temperature changes the geometry of the learned space. It is not just a numerical detail.
 
 ---
 
-## 6. Data augmentation
+## 6. What Counts as a Positive Pair
 
-A key design choice is **how to construct positive pairs**.
+The most important design choice is the construction of positive pairs.
 
-For images:
+For images, positives may come from:
 
-* random cropping
-* color jitter
-* flipping
+- random crop;
+- color jitter;
+- blur;
+- horizontal flip;
+- two views of the same object.
 
-For text:
+For text, positives may come from:
 
-* token masking
-* **dropout**
+- different dropout masks;
+- neighboring contexts;
+- paraphrases;
+- paired query-document data;
+- equivalent translations.
 
-The augmentation defines what “invariance” the model should learn.
+For image-text models, positives are matched image-caption pairs.
 
----
+The positive-pair rule defines what invariances the model learns.
 
-## 7. Temperature and geometry
-
-The temperature $\tau$ controls the concentration of the distribution:
-
-* small $\tau$: sharp distinctions, stronger separation
-* large $\tau$: smoother similarity distribution
-
-Geometrically:
-
-* embeddings lie on a hypersphere
-* contrastive loss distributes points to maximize uniformity while preserving similarity
+> [!WARNING]
+> Bad positive pairs teach bad invariances. If two views remove information needed for the task, the representation may become insensitive to important differences.
 
 ---
 
-## 8. Summary
+## 7. Connection to Clustering
 
-Contrastive learning transforms unsupervised learning into a similarity-based objective:
+Contrastive learning can make clustering easier because it reshapes the embedding space before clustering.
 
-* learn representations where similar samples are close
-* dissimilar samples are far apart
+The pipeline becomes:
 
-Key insight:
-> Clustering is no longer performed explicitly. It emerges naturally from the geometry of the learned embedding space.
+$$
+\text{data}
+\rightarrow
+\text{contrastive encoder}
+\rightarrow
+\text{embedding space}
+\rightarrow
+\text{clustering}
+$$
+
+If positive pairs reflect useful semantic identity, then related examples tend to move closer. K-means, KNN, and retrieval methods can then operate on a better geometry.
+
+---
+
+## 8. Common Failure Modes
+
+Contrastive learning can fail when:
+
+- positives are too weak or too aggressive;
+- negatives include false negatives from the same semantic class;
+- batch size is too small for useful comparison;
+- the model learns shortcuts from augmentation artifacts;
+- the learned similarity does not match the downstream task.
+
+Good inspection includes nearest neighbors, retrieval examples, cluster quality, and sensitivity to augmentation choices.
+
+---
+
+## 9. Summary
+
+Contrastive learning is representation learning through comparison.
+
+The central rule is:
+
+$$
+\boxed{
+\text{positive pairs close, negative pairs far}
+}
+$$
+
+It does not replace clustering. It often creates the embedding geometry that makes clustering meaningful.

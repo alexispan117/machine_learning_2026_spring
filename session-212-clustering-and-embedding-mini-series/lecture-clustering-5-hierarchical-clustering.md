@@ -1,191 +1,184 @@
 # Hierarchical Clustering
 
+Hierarchical clustering does not return only one flat partition. It builds a tree of nested groupings, so we can inspect structure at multiple scales.
+
 ![](./img-embedding/hierarch2.gif)
 
 ---
 
-## 1. Motivation: Beyond Flat Clustering
+## 1. Motivation: Beyond One Partition
 
-So far, we have seen:
+K-means, GMM, and DBSCAN usually return one clustering result. In many datasets, that is too narrow.
 
-* **K-Means** → produces one partition
-* **DBSCAN** → produces one partition
+We may want to know:
 
-But in many real-world scenarios, a single clustering is not enough.
+- whether small groups merge into larger themes;
+- whether the data has structure at multiple resolutions;
+- which clusters are close to each other;
+- where a reasonable tree cut might create useful groups.
 
-We often care about:
+Hierarchical clustering asks:
 
-* How small groups combine into larger ones
-* Whether clusters exist at multiple scales
-* The relationships between clusters
-
-> Instead of asking *“What is the clustering?”*, we ask:
-> **“What is the structure of the data?”**
+> What nested structure does the dataset contain?
 
 ---
 
-## 2. Core Idea: Represent Clustering as a Tree
-
+## 2. Dendrograms
 
 ![](./img-embedding/hierarch.gif)
 
-Hierarchical clustering does not return a single grouping.
+The output of hierarchical clustering is a dendrogram, which is a tree.
 
-Instead, it builds a **tree structure**, called a **dendrogram**.
+- Leaves represent individual data points.
+- Internal nodes represent merged clusters.
+- The root represents all points merged into one cluster.
+- The height of a merge represents the distance at which two clusters were joined.
 
----
+A flat clustering is produced by cutting the tree at a chosen height.
 
-### How to Interpret the Tree
-
-* **Leaves** → individual data points
-* **Internal nodes** → merged clusters
-* **Root** → all data combined into one cluster
-
----
-
-### Key Insight
-
-> A clustering is obtained by **cutting the tree at a chosen level**
-
-* Cut near the bottom → many small clusters
-* Cut near the top → few large clusters
-
-This gives a **multi-resolution view** of the data.
+> [!INFO]
+> A dendrogram is not just a decorative plot. It records the sequence of merge decisions made by the algorithm.
 
 ---
 
-## 3. Two Approaches to Building the Tree
+## 3. Agglomerative Clustering
 
+The most common form is agglomerative clustering, which is bottom-up.
 
-### 3.1 Agglomerative Clustering (Bottom-Up)
-
-This is the most commonly used method.
-
-Start with:
-
-> Each data point is its own cluster
-
-Then repeatedly:
-
-1. Find the two closest clusters
-2. Merge them
-3. Continue until only one cluster remains
-
-
-### 3.2 Divisive Clustering (Top-Down)
-
-Start with:
-
-> All data points in one cluster
-
-Then recursively split clusters into smaller ones.
-
-
-*In practice, agglomerative methods are far more widely used.*
-
----
-
-## 4.  What Is the Distance Between Clusters?
-
-Unlike K-Means, hierarchical clustering must define:
-
-> **Distance between clusters, not just points**
-
-This is determined by the **linkage criterion**.
-
----
-
-### 4.1 Single Linkage (Nearest Neighbor)
-
-$$
-d(A, B) = \min_{x \in A, y \in B} \|x - y\|
-$$
-
-**Behavior:**
-
-* Clusters merge if any pair of points is close
-* Tends to create long, chain-like structures
-
-> This is known as the **chaining effect**
-
----
-
-### 4.2 Complete Linkage (Farthest Neighbor)
-
-$$
-d(A, B) = \max_{x \in A, y \in B} \|x - y\|
-$$
-
-**Behavior:**
-
-* Requires all points to be close before merging
-* Produces compact, well-separated clusters
-
----
-
-### 4.3 Average Linkage
-
-$$
-d(A, B) = \text{average distance between all pairs of points}
-$$
-
-**Behavior:**
-
-* Balances between single and complete linkage
-* More stable in practice
-
----
-
-### 4.4 Ward Linkage (Variance-Based)
-
-Ward’s method merges clusters by minimizing:
-
-> **Increase in within-cluster variance**
-
----
-
-### Important Insight
-
-> Different linkage rules produce fundamentally different cluster structures
-
-This is a key conceptual difference from K-Means.
-
----
-
-## 5. Pseudo Algorithm (Agglomerative)
-
-```
-Input: dataset X
-
-Initialize: each data point is its own cluster
+```text
+Input: data matrix X
+Initialize each point as its own cluster
 
 repeat
-    compute distances between all clusters
-    merge the two closest clusters (based on linkage)
-    update cluster distances
+    compute distances between current clusters
+    merge the two closest clusters
+    update the cluster distances
 
-until only one cluster remains
+until one cluster remains
 
-Output: dendrogram (hierarchical tree)
+Output: dendrogram
 ```
+
+At the beginning, there are $n$ clusters. After each merge, the number of clusters decreases by one.
 
 ---
 
-## 6. From Tree to Clusters
+## 4. Divisive Clustering
+
+Divisive clustering is top-down.
+
+It starts with one cluster containing every point, then recursively splits clusters into smaller groups.
+
+This approach is conceptually clean but less common in ordinary practice because deciding the best split can be expensive.
+
+---
+
+## 5. Linkage: Distance Between Clusters
+
+Hierarchical clustering needs a distance between clusters, not only between points.
+
+Let $A$ and $B$ be two clusters. A linkage rule defines $D(A,B)$.
+
+### Single Linkage
+
+Single linkage uses the closest pair:
+
+$$
+D_{\mathrm{single}}(A,B)
+=
+\min_{x \in A,\, y \in B}
+\|x-y\|_2
+$$
+
+It can discover elongated structures, but it is vulnerable to chaining.
+
+### Complete Linkage
+
+Complete linkage uses the farthest pair:
+
+$$
+D_{\mathrm{complete}}(A,B)
+=
+\max_{x \in A,\, y \in B}
+\|x-y\|_2
+$$
+
+It prefers compact clusters and resists chaining.
+
+### Average Linkage
+
+Average linkage averages all pairwise distances:
+
+$$
+D_{\mathrm{average}}(A,B)
+=
+\frac{1}{|A||B|}
+\sum_{x \in A}
+\sum_{y \in B}
+\|x-y\|_2
+$$
+
+It is often a useful compromise between single and complete linkage.
+
+### Ward Linkage
+
+Ward linkage merges the pair that creates the smallest increase in within-cluster squared error.
+
+If $\mu_A$ and $\mu_B$ are cluster means, the merge cost is:
+
+$$
+\Delta(A,B)
+=
+\frac{|A||B|}{|A|+|B|}
+\|\mu_A - \mu_B\|_2^2
+$$
+
+Ward linkage is close in spirit to K-means because it favors compact variance-minimizing clusters.
+
+> [!WARNING]
+> Different linkage rules can produce very different dendrograms on the same data. The linkage rule is a modeling choice, not a formatting option.
+
+---
+
+## 6. Cutting the Tree
 
 ![](./img-embedding/treecut.jpg)
 
-Once the dendrogram is built, we can extract clusters in two main ways:
+After building the dendrogram, we still need a flat clustering if we want cluster labels.
 
+Two common choices are:
 
-### Method 1: Cut by Distance Threshold
+1. Cut by distance threshold.
+2. Cut to obtain exactly $K$ clusters.
 
-* Choose a height in the tree
-* Cut horizontally
-* Each connected component becomes a cluster
+Cutting low in the tree gives many small clusters. Cutting high gives fewer larger clusters.
 
+---
 
-### Method 2: Specify Number of Clusters K
+## 7. Practical Inspection
 
-* Cut the tree so that exactly K clusters remain
+When using hierarchical clustering, inspect:
 
+- the dendrogram merge heights;
+- whether one or two merges are much larger than previous merges;
+- whether linkage choice changes the conclusion;
+- whether clusters contain coherent representative examples;
+- whether the result remains stable after small data changes.
+
+For embeddings, hierarchical clustering can reveal nested semantic structure. For raw high-dimensional features, it may mostly reveal noise.
+
+---
+
+## 8. Summary
+
+Hierarchical clustering organizes data as a tree instead of a single partition.
+
+The central mechanism is:
+
+$$
+\boxed{
+\text{repeatedly merge the closest clusters according to a linkage rule}
+}
+$$
+
+The main advantage is multi-scale inspection. The main risk is that the tree can look meaningful even when the distance metric or linkage rule is poorly matched to the data.

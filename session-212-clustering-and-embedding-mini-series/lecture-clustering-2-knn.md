@@ -1,53 +1,63 @@
-# K-Nearest Neighbors (KNN)
+# K-Nearest Neighbors
 
-## *NOT for clustering*
-
+K-nearest neighbors, or KNN, is not a clustering algorithm. We include it here because it teaches the same geometric question that clustering depends on: what does it mean for one point to be near another?
 
 ![](./img-word2vec/knnc.jpg)
 
 ---
 
-## 1. Why KNN Here?
+## 1. Why KNN Appears in a Clustering Mini-Series
 
-After **K-Means**, it is natural to encounter another “K-based” method: **K-Nearest Neighbors (KNN)**.
+K-means and KNN both use the letter $K$, but they solve different problems.
 
-Despite the similar name:
+| Method | Learning Setting | Uses Labels | Main Question |
+| --- | --- | --- | --- |
+| K-means | Unsupervised | No | Which cluster should this point join? |
+| KNN | Supervised | Yes | What label or value do nearby examples suggest? |
 
-* **K-Means → Clustering (unsupervised)**
-* **KNN → Prediction (supervised)**
+KNN is useful here because it makes the dependency on distance painfully clear. If the distance metric is bad, KNN fails. The same is true for clustering.
 
-This confusion is extremely common. So we address it early.
+> [!WARNING]
+> KNN is not K-means. KNN predicts labels or values from labeled neighbors; K-means discovers clusters without labels.
 
 ---
 
 ## 2. Core Idea
 
-KNN is based on a simple principle:
+Given a new point $x \in \mathbb{R}^{1 \times d}$, KNN searches the training set for the $K$ closest points.
 
-> Similar inputs should have similar outputs.
+Let $\mathcal{N}_K(x)$ be the index set of those $K$ nearest neighbors. The prediction is made by aggregating their targets.
 
-Given a new data point $x$, we:
-
-1. Compute its distance to all training points
-2. Select the **K nearest neighbors**
-3. Aggregate their labels to make a prediction
+The method has no separate training phase. It stores the training data and performs most of the work at prediction time.
 
 ---
 
-## 3. Distance Metric
+## 3. Distance Metrics
 
-The notion of “nearest” depends on the distance function.
+The word "nearest" only makes sense after choosing a distance or similarity function.
 
-Most common choice: **Euclidean distance**
+Euclidean distance is common for ordinary numeric features:
 
 $$
-d(x, x_i) = \sqrt{\sum_{j=1}^{d} (x_j - x_{i,j})^2}
+d(x, x^{(i)}) =
+\sqrt{
+\sum_{j=1}^{d}
+\left(x_j - x_j^{(i)}\right)^2
+}
 $$
 
-Other options:
+Cosine similarity is common for embeddings:
 
-* Manhattan distance
-* Cosine distance (important for embeddings later)
+$$
+\operatorname{sim}(x, x^{(i)}) =
+\frac{x {x^{(i)}}^\top}
+{\|x\|_2 \left\|x^{(i)}\right\|_2}
+$$
+
+For normalized embeddings, cosine similarity becomes a dot product.
+
+> [!INFO]
+> In embedding systems, "nearest neighbor search" usually means retrieving items with high cosine similarity or high dot product, not necessarily using Euclidean distance.
 
 ---
 
@@ -55,96 +65,110 @@ Other options:
 
 ![](./img-word2vec/knna.jpg)
 
-
-Each neighbor has a label.
-
-Prediction is done via **majority voting**:
+For classification, each neighbor has a class label $y_i$. The predicted class is the majority vote:
 
 $$
-\hat{y} = \arg\max_c \sum_{i \in \mathcal{N}_K(x)} \mathbf{1}(y_i = c)
+\boxed{
+\hat{y}
+= \arg\max_{c}
+\sum_{i \in \mathcal{N}_K(x)}
+\mathbf{1}(y_i = c)
+}
 $$
 
-Interpretation:
+A distance-weighted version gives closer neighbors more influence:
 
-* Look at K neighbors
-* Count how many belong to each class
-* Pick the most frequent class
+$$
+\hat{y}
+= \arg\max_c
+\sum_{i \in \mathcal{N}_K(x)}
+w_i \mathbf{1}(y_i = c)
+$$
+
+where $w_i$ can be chosen as
+
+$$
+w_i = \frac{1}{d(x,x^{(i)}) + \epsilon}
+$$
+
+The small constant $\epsilon > 0$ prevents division by zero.
 
 ---
 
 ## 5. KNN for Regression
 
-Instead of labels, we have continuous values.
-
-Prediction becomes **averaging**:
-
-$$
-\hat{y} = \frac{1}{K} \sum_{i \in \mathcal{N}_K(x)} y_i
-$$
-
-Optionally, use **distance-weighted averaging**:
-
-$$
-\hat{y} = \frac{\sum_{i} w_i y_i}{\sum_i w_i}, \quad w_i = \frac{1}{d(x, x_i)}
-$$
-
 ![](./img-word2vec/knnr.jpg)
 
+For regression, the targets are continuous values. The simplest prediction is the average neighbor target:
+
+$$
+\boxed{
+\hat{y}
+= \frac{1}{K}
+\sum_{i \in \mathcal{N}_K(x)}
+y_i
+}
+$$
+
+A distance-weighted prediction is:
+
+$$
+\hat{y}
+=
+\frac{
+\sum_{i \in \mathcal{N}_K(x)} w_i y_i
+}{
+\sum_{i \in \mathcal{N}_K(x)} w_i
+}
+$$
 
 ---
 
-## 6. Key Characteristics
-
-### No Training Phase
-
-KNN is a **lazy learner**:
-
-* No explicit model is learned
-* All computation happens at inference time
-
----
-
-### Non-Parametric
-
-* No fixed number of parameters
-* Model complexity grows with data
-
----
-
-### Local Decision Making
-
-Predictions depend only on nearby points:
-
-* Highly flexible
-* Can capture complex decision boundaries
-
----
-
-## 7. Choosing K
+## 6. Choosing K
 
 ![](./img-word2vec/knnb.jpg)
 
+The hyperparameter $K$ controls the bias-variance trade-off.
 
-K controls the bias-variance tradeoff:
+| Choice | Behavior | Risk |
+| --- | --- | --- |
+| Small $K$ | Local, flexible predictions | Sensitive to noise |
+| Large $K$ | Smoother predictions | Can wash out local structure |
 
-* Small K:
-
-  * Low bias
-  * High variance (sensitive to noise)
-
-* Large K:
-
-  * High bias
-  * Low variance (over-smoothing)
+The best $K$ is usually selected using validation data.
 
 ---
 
-## 8. KNN vs K-Means
+## 7. Connection to Embeddings
 
-| Aspect       | KNN                 | K-Means            |
-| ------------ | ------------------- | ------------------ |
-| Type         | Supervised          | Unsupervised       |
-| Goal         | Predict label/value | Discover clusters  |
-| Uses labels? | Yes                 | No                 |
-| Output       | Prediction          | Cluster assignment |
-| Computation  | At inference        | During training    |
+KNN becomes especially important after we learn embeddings.
+
+Many modern systems use the same pattern:
+
+$$
+\text{raw input}
+\rightarrow
+\text{embedding}
+\rightarrow
+\text{nearest neighbor search}
+\rightarrow
+\text{retrieval or prediction}
+$$
+
+Examples include:
+
+- image search;
+- semantic text search;
+- recommendation;
+- retrieval-augmented generation;
+- duplicate detection.
+
+KNN reminds us that representation quality controls neighbor quality.
+
+---
+
+## 8. Summary
+
+KNN is a supervised nearest-neighbor method, not a clustering method.
+
+Its value in this mini-series is conceptual: it shows that distance is a modeling choice. If "near" does not mean "similar," both KNN and clustering will produce misleading results.

@@ -1,87 +1,133 @@
-# t-SNE and UMAP: Visualizing High-Dimensional Data
+# t-SNE and UMAP
+
+t-SNE and UMAP are visualization methods for high-dimensional data. They help us inspect embeddings, but they should not be treated as precise maps.
 
 ---
 
-## 1. The Core Problem: Humans Cannot See High Dimensions
+## 1. The Visualization Problem
 
-Many modern datasets live in high-dimensional spaces:
+Many modern representations live in high-dimensional spaces:
 
-* word embeddings
-* image embeddings
-* neural network hidden states
+- word embeddings;
+- sentence embeddings;
+- image embeddings;
+- neural network hidden states;
+- customer or product feature vectors.
 
-We cannot directly visualize them, so we need dimensionality reduction:
+Humans cannot directly inspect points in $\mathbb{R}^d$ when $d$ is large, so we often project them into two or three dimensions:
 
 $$
-\mathbb{R}^{d} \rightarrow \mathbb{R}^{2} \ \text{or} \ \mathbb{R}^{3}
+f: \mathbb{R}^{d} \rightarrow \mathbb{R}^{2}
 $$
 
-The goal is not perfect reconstruction, but structure preservation for visualization.
+The goal is not perfect reconstruction. The goal is useful visual inspection.
 
 ---
 
-## 2. t-SNE: Local Neighborhood Preservation
-
+## 2. t-SNE
 
 ![](./img-embedding/tsne8.gif)
 
-t-SNE (t-Distributed Stochastic Neighbor Embedding) focuses on preserving local structure.
+t-SNE stands for t-distributed stochastic neighbor embedding.
 
-Main idea:
+Its main goal is to preserve local neighborhoods:
 
-* points that are close in high-dimensional space stay close in 2D
-* far-away relationships are not reliable
+- points close in high-dimensional space should usually appear close in the plot;
+- faraway relationships are not reliable;
+- visual cluster separation is often exaggerated.
 
-So t-SNE is mainly a **local similarity visualization method**.
+t-SNE is useful for seeing whether local groups exist in an embedding space.
 
-Key properties:
-
-* strong cluster separation visually
-* good for inspecting embeddings
-* global distances are not meaningful
-
-**Important:**
-
-t-SNE is a visualization tool, not a measurement tool
-
-So you should not interpret:
-
-* distance between clusters
-* cluster sizes
-* global geometry
+> [!WARNING]
+> Do not use t-SNE plots to compare global distances, cluster sizes, or absolute positions. A t-SNE plot is a visualization, not a coordinate system with trustworthy global geometry.
 
 ---
 
-## 3. UMAP: Manifold-Based Structure Preservation
+## 3. UMAP
 
-UMAP (Uniform Manifold Approximation and Projection) is another dimensionality reduction method.
+UMAP stands for uniform manifold approximation and projection.
 
-Intuition:
+It also preserves local structure, but it is often faster and can preserve more global layout than t-SNE in practice.
 
-* assumes data lies on a manifold
-* tries to preserve both local connectivity and global layout
+UMAP is commonly used when:
 
-Key advantages:
+- the dataset is large;
+- we want a fast exploratory visualization;
+- we want a more stable view across parameter settings;
+- we want to inspect approximate manifold structure.
 
-* better scalability to large datasets
-* more consistent embeddings across runs
-* more meaningful global structure than t-SNE (but still approximate)
+The word "approximate" matters. UMAP still distorts the original geometry.
 
 ---
 
-## 4. When to Use Them
+## 4. Parameters That Matter
+
+For t-SNE, important parameters include:
+
+- perplexity;
+- learning rate;
+- random seed;
+- number of iterations.
+
+For UMAP, important parameters include:
+
+- number of neighbors;
+- minimum distance;
+- distance metric;
+- random seed.
+
+Changing these parameters can change the plot.
+
+> [!INFO]
+> A good habit is to generate several plots with different seeds and parameters. If a visual pattern only appears once, treat it cautiously.
+
+---
+
+## 5. When to Use Them
 
 ![](./img-embedding/tsne3.gif)
 
-Use t-SNE or UMAP when:
+Use t-SNE or UMAP for:
 
-* visualizing word embeddings
-* inspecting image embeddings
-* debugging representation learning
-* exploring latent spaces in neural networks
+- exploring whether embeddings contain visible groups;
+- debugging representation learning;
+- spotting outliers;
+- communicating approximate local structure;
+- comparing embedding models qualitatively.
 
-Do NOT use them for:
+Do not use them for:
 
-* quantitative evaluation
-* measuring true distances
-* making claims about global geometry
+- measuring true cluster distances;
+- proving that clusters exist;
+- choosing $K$ mechanically;
+- evaluating model quality by visual appearance alone.
+
+---
+
+## 6. Better Inspection Practice
+
+A useful inspection workflow is:
+
+1. Compute embeddings.
+2. Visualize with t-SNE or UMAP.
+3. Color points by known labels or metadata if available.
+4. Inspect nearest neighbors in the original embedding space.
+5. Check quantitative metrics outside the visualization.
+
+The plot should start questions, not end them.
+
+---
+
+## 7. Summary
+
+t-SNE and UMAP compress high-dimensional structure into a human-readable view.
+
+Their central value is:
+
+$$
+\boxed{
+\text{visual inspection of local neighborhood structure}
+}
+$$
+
+Their central danger is overinterpretation. Use them as diagnostic tools, not as mathematical proof.

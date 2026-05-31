@@ -1,161 +1,200 @@
-# From Discrete to Continuous: The Gap
+# Text Embedding Motivation
+
+Text embeddings solve the problem of turning discrete language symbols into continuous vectors that neural networks and similarity methods can use.
 
 ![](./img-word2vec/embedding-the-cat-sat-on-a-mat.jpg)
 
-Online visualization:
+Online visualizations:
+
 - https://projector.tensorflow.org/
 - https://www.cs.cmu.edu/~dst/WordEmbeddingDemo/tutorial.html
 
 ---
 
-## 1. The Problem: Computers Don't Understand Symbols
+## 1. The Discrete-to-Continuous Gap
 
-Human language is made of discrete symbols: "cat", "dog", "love".
+Human language is made of discrete symbols:
 
-Computers work with numbers: $0.5$, $-1.2$, $3.14159$.
+- words;
+- subword tokens;
+- punctuation;
+- phrases;
+- documents.
 
-The fundamental question of NLP:
+Neural networks operate on numbers. The basic question is:
 
-> How do we bridge the gap between discrete tokens and continuous vectors?
+$$
+\boxed{
+\text{How do discrete tokens become continuous vectors?}
+}
+$$
 
-This is not just a technical detail. It shapes everything that follows in deep learning for language.
+This is the entry point for modern NLP.
 
 ---
 
-## 2. The One-Hot Encoding Trap
+## 2. One-Hot Encoding
 
-### 2.1 First Attempt: One-Hot Vectors
+Suppose the vocabulary has size $V$. A one-hot vector for token $i$ is:
 
-The naive approach: assign each word a unique index, then encode it as a binary vector.
+$$
+e_i \in \mathbb{R}^{V}
+$$
+
+where:
+
+- the $i$-th entry is $1$;
+- every other entry is $0$.
+
+Example in code:
 
 ```python
 import numpy as np
 
 vocab = ["the", "cat", "sat", "on", "mat"]
-vocab_size = len(vocab)
+cat_index = 1
 
-# One-hot encoding: each word is a vector of size vocab_size
-# "cat" is at index 1
-cat_onehot = np.zeros(vocab_size)
-cat_onehot[1] = 1
-# Result: [0, 1, 0, 0, 0]
+cat_one_hot = np.zeros(len(vocab))
+cat_one_hot[cat_index] = 1
 ```
 
-### 2.2 The Math
-
-For a vocabulary of size $V$, each word becomes a vector:
-
-$$
-\mathbf{e}_i \in \mathbb{R}^{V}
-$$
-
-where only position $i$ is 1, all others are 0.
-
-### 2.3 The Disaster: Dimensionality
-
-Consider a modern vocabulary:
-
-| Vocabulary Size | One-Hot Dimension |
-|-----------------|-------------------|
-| Small (10K)     | 10,000            |
-| GPT-2 (50K)     | 50,000            |
-| GPT-3 (100K)    | 100,000           |
-| Multilingual (200K+) | 200,000+     |
-
-Each token becomes a vector with 100,000+ dimensions, but only **one** non-zero entry.
-
-This is:
-- Memory inefficient
-- Computationally wasteful
-- **Semantically empty**
+This encodes identity, but not meaning.
 
 ---
 
-## 3. The Semantic Void
+## 3. Why One-Hot Vectors Are Weak
 
-### 3.1 What's Missing?
+One-hot vectors have three major problems.
 
-One-hot vectors encode **identity**, not **meaning**.
+### High Dimension
 
-Consider:
+The vector dimension equals the vocabulary size.
+
+| Vocabulary | Dimension |
+| --- | --- |
+| Small vocabulary | $10{,}000$ |
+| Medium tokenizer | $50{,}000$ |
+| Large multilingual tokenizer | $200{,}000$ or more |
+
+The vectors are mostly zeros.
+
+### No Similarity
+
+For two different one-hot vectors $e_i$ and $e_j$:
 
 $$
-\begin{array}{l}
-\text{``cat''} = [0, \; 1, \; 0, \; 0, \; 0, \; \dots] \\
-\text{``dog''} = [0, \; 0, \; 0, \; 1, \; 0, \; \dots]
-\end{array}
+e_i e_j^\top = 0
+\quad
+\text{when}
+\quad
+i \ne j
 $$
 
-The dot product:
+This means "cat" and "dog" are as unrelated as "cat" and "spreadsheet" under the one-hot dot product.
 
-$$
-\text{cat} \cdot \text{dog} = 0
-$$
+### No Generalization
 
-Every pair of distinct words has zero similarity.
+The model cannot know that two tokens play similar roles unless it learns that from data in later layers.
 
-But we know:
-- "cat" and "dog" are similar (both animals, both pets)
-- "cat" and "automobile" are different
-- "king" and "queen" relate in a specific way
-
-One-hot encoding discards all this structure.
+The input representation gives no help.
 
 ---
 
-## 4. The Intuition: What We Need
+## 4. Dense Embeddings
 
-Imagine a map where:
-- Similar words are close together
-- Related concepts cluster
-- Directions encode relationships
+A dense embedding replaces a sparse one-hot vector with a learned vector:
 
-This is the geometric view of meaning.
+$$
+x_i \in \mathbb{R}^{V}
+\rightarrow
+e_i \in \mathbb{R}^{d}
+$$
 
-> Words with similar contexts should have similar vectors.
+where $d \ll V$.
 
-This idea, called the **distributional hypothesis**, will guide us in the next lecture.
+The embedding matrix is:
+
+$$
+E \in \mathbb{R}^{V \times d}
+$$
+
+The embedding for token $i$ is row $i$ of $E$:
+
+$$
+e_i = E[i]
+$$
+
+This is a lookup operation, not a hand-designed semantic rule.
 
 ---
 
-## 5. Dimensionality Reduction: The Path Forward
+## 5. The Distributional Hypothesis
 
-If we could compress 100,000 dimensions into, say, 512 dimensions—while preserving semantic relationships—we would solve two problems at once:
+The guiding idea is:
 
-1. **Efficiency**: Smaller vectors are faster to compute
-2. **Generalization**: Dense vectors capture patterns and similarities
+> Words that appear in similar contexts tend to have related meanings.
 
-This is what word embeddings do.
+For example, "cat" and "dog" may appear near words such as "pet," "food," "fur," and "sleep." A learning algorithm can use these context patterns to place them closer in embedding space.
+
+This idea motivates Word2Vec in the next lecture.
 
 ---
 
-## 6. The Gateway to Neural Computation
+## 6. Neural Computation
 
-From one-hot:
+Dense embeddings make text usable by neural networks.
 
-$$
-\mathbf{x} \in \mathbb{R}^{V}, \quad \|\mathbf{x}\|_0 = 1
-$$
-
-To dense embedding:
+A token sequence becomes a matrix:
 
 $$
-\mathbf{e} \in \mathbb{R}^{d}, \quad d \ll V
+(i_1,\ldots,i_T)
+\rightarrow
+H^{(0)} \in \mathbb{R}^{T \times d}
 $$
 
-The transformation from discrete to continuous is the first step in any neural language model.
+where row $t$ is the embedding of token $i_t$:
 
-In nanochat, this happens in a single line:
+$$
+h_t^{(0)} = E[i_t]
+$$
+
+In a transformer implementation, the lookup often appears as a single layer call:
 
 ```python
-# From nanochat/gpt.py
-x = self.transformer.wte(idx)  # (batch, seq_len) -> (batch, seq_len, n_embd)
+x = token_embedding(token_ids)
 ```
 
-The `wte` ("word token embedding") layer converts token indices into dense vectors.
+The mathematical operation is still the same: token IDs select rows from a learned matrix.
 
-**Typical dimensions**:
-- Vocabulary size $V$: 32,000–100,000
-- Embedding dimension $d$: 512–4,096
-- Compression ratio: $\frac{V}{d} \approx 40\times$
+---
 
+## 7. What Makes a Good Text Embedding
+
+A useful text embedding should support:
+
+- semantic similarity;
+- syntactic regularities;
+- downstream prediction;
+- retrieval;
+- clustering;
+- robustness to surface variation.
+
+Different objectives produce different embedding geometries. Word2Vec, transformer language models, sentence encoders, and multimodal models all learn embeddings, but they do not learn the same space.
+
+---
+
+## 8. Summary
+
+One-hot vectors represent token identity. Dense embeddings represent tokens in a learned continuous space.
+
+The transition is:
+
+$$
+\boxed{
+\text{sparse identity vector}
+\rightarrow
+\text{dense learned representation}
+}
+$$
+
+This is the bridge from symbolic text to neural representation learning.
