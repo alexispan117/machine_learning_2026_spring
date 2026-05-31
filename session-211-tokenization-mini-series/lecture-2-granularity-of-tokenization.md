@@ -133,9 +133,9 @@ Out-of-vocabulary collapse happens when many different strings map to the same u
 In a word-level tokenizer:
 
 ```text
-Pudong -> <unk>
-Xuhui -> <unk>
-ShanghaiTech -> <unk>
+Shanghaidaxue -> <unk>
+Pudongxinqu -> <unk>
+Nanchenlu -> <unk>
 ```
 
 The model receives the same ID for distinct objects.
