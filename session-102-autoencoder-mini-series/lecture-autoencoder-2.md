@@ -1,169 +1,318 @@
-# Variational Autoencoder: From Deterministic to Probabilistic Encoding
+# Variational Autoencoders
+
+Variational autoencoders turn autoencoders into probabilistic generative models by encoding each input as a distribution over latent variables.
+
+![](./img/vae2.png)
 
 ---
 
-## 1. Architectural Overview
+## 1. From Autoencoder to VAE
 
-### Standard Autoencoder
-
-![](img/ae.png)
-$$
-\text{Input } x \xrightarrow{\text{Encoder}} z \xrightarrow{\text{Decoder}} \hat{x}
-$$
-
-The encoder maps each input to a single point $z \in \mathbb{R}^d$ in latent space.
-
-### Variational Autoencoder
-
-
-![](img/vae2.png)
+A standard autoencoder maps each input to one latent point:
 
 $$
-\text{Input } x \xrightarrow{\text{Encoder}} q(z|x) = \mathcal{N}(\mu(x), \text{diag}(\sigma^2(x))) \xrightarrow{\text{Sample}} z \xrightarrow{\text{Decoder}} \hat{x}
+z = f_{\theta}(x)
 $$
 
-The encoder outputs distribution parameters $(\mu, \sigma^2)$ instead of a single point in latent space.
+Then it reconstructs:
+
+$$
+\hat{x}=g_{\phi}(z)
+$$
+
+This is useful for compression, but it does not guarantee a smooth or sampleable latent space.
+
+A variational autoencoder, or VAE, maps each input to a latent distribution:
+
+$$
+q_{\phi}(z \mid x)
+$$
+
+The decoder then learns to reconstruct or generate data from sampled latent variables.
 
 ---
 
-## 2. From Point to Distribution
+## 2. Why Point Codes Are Not Enough
 
-### Autoencoder: Deterministic Mapping
+In an ordinary autoencoder, nearby latent points are not guaranteed to decode into meaningful outputs.
 
-Each input $x$ maps to exactly one latent point:
+Problems:
 
-$$
-z = f_{\text{enc}}(x)
-$$
+- gaps can appear in latent space;
+- random latent samples may decode to nonsense;
+- interpolation can pass through invalid regions;
+- there is no explicit prior distribution for generation.
 
-**Limitations:**
-- No structure guarantees in latent space
-- Random sampling of $z$ produces garbage outputs
-- Cannot generate new data
-
-### VAE: Probabilistic Encoding
-
-Each input $x$ defines a probability distribution over latent space:
-
-$$
-q(z|x) = \prod_{i=1}^d \mathcal{N}(z_i; \mu_i(x), \sigma_i^2(x))
-$$
-
-**Advantages:**
-- Latent space is regularized toward prior $p(z) = \mathcal{N}(0, I)$
-- Can generate new samples by $z \sim \mathcal{N}(0, I)$
-- Smooth interpolation between data points
+The VAE fixes this by regularizing latent codes toward a known prior.
 
 ---
 
-## 3. Neuron-to-Parameter Mapping
+## 3. Encoder as Distribution
 
-For latent dimension $d$, the encoder outputs $2d$ neurons.
+For each input $x$, the VAE encoder predicts parameters of a Gaussian:
 
-### Example: $d = 2$
+$$
+q_{\phi}(z \mid x)
+=
+\mathcal{N}
+\left(
+\mu_{\phi}(x),
+\operatorname{diag}
+\left(
+\sigma_{\phi}^2(x)
+\right)
+\right)
+$$
 
-The encoder output layer has 4 neurons:
+For latent dimension $k$, the encoder outputs:
 
-| Neuron | Output | Meaning |
-|--------|--------|---------|
-| 1 | $\mu_1$ | Mean of dimension 1 |
-| 2 | $\mu_2$ | Mean of dimension 2 |
-| 3 | $\log \sigma_1^2$ | Log-variance of dimension 1 |
-| 4 | $\log \sigma_2^2$ | Log-variance of dimension 2 |
+$$
+\mu_{\phi}(x) \in \mathbb{R}^{1 \times k}
+$$
 
+and:
+
+$$
+\log \sigma_{\phi}^2(x) \in \mathbb{R}^{1 \times k}
+$$
+
+So the final encoder head has $2k$ outputs.
+
+> [!INFO]
+> Implementations usually predict log variance instead of variance. This is numerically more stable and avoids forcing the network to output only positive raw variance values.
 
 ---
 
-## 4. Encoding Flow
+## 4. Sampling Latent Variables
 
-
-![](img/vae.png)
-
-Complete process for encoding input $x$ to latent $z$:
+The VAE samples:
 
 $$
-\begin{aligned}
-&\textbf{Step 1: Encoder forward pass} \\
-&\quad [\mu_1, \ldots, \mu_d, \log \sigma_1^2, \ldots, \log \sigma_d^2] = f_{\text{enc}}(x; \theta) \\
-&\textbf{Step 2: Compute standard deviations} \\
-&\quad \sigma_i = \exp\left(\frac{1}{2} \log \sigma_i^2\right) \\
-&\textbf{Step 3: Sample noise} \\
-&\quad \varepsilon \sim \mathcal{N}(0, I) \\
-&\textbf{Step 4: Reparameterize} \\
-&\quad z_i = \mu_i + \sigma_i \odot \varepsilon_i \\
-&\textbf{Result: Latent code } z = [z_1, \ldots, z_d]
-\end{aligned}
+z \sim q_{\phi}(z \mid x)
 $$
+
+The decoder maps the sample to a reconstruction:
+
+$$
+\hat{x} = g_{\theta}(z)
+$$
+
+The prior is usually:
+
+$$
+p(z)=\mathcal{N}(0,I)
+$$
+
+After training, we can generate new samples by:
+
+```text
+sample z from N(0, I)
+decode z into x_hat
+```
+
+This is the main generative advantage over a plain autoencoder.
 
 ---
 
-## 5. Decoding Flow
+## 5. The VAE Objective
 
-The decoder maps latent code back to data space:
+The VAE objective has two forces:
+
+1. Reconstruct the input well.
+2. Keep the encoder distribution close to the prior.
+
+The loss for one sample is often written:
 
 $$
-\begin{aligned}
-&\textbf{Input: Latent code } z \in \mathbb{R}^d \\
-&\textbf{Step 1: Decoder forward pass} \\
-&\quad h = g_{\text{dec}}(z; \phi) \\
-&\textbf{Step 2: Output activation (depending on data type)} \\
-&\quad \hat{x} = \text{sigmoid}(h) \quad \text{(binary data)} \\
-&\quad \hat{x} = h \quad \text{(continuous data)} \\
-&\textbf{Result: Reconstruction } \hat{x}
-\end{aligned}
+\boxed{
+\mathcal{L}_{\mathrm{VAE}}
+=
+\mathcal{L}_{\mathrm{recon}}
++
+D_{\mathrm{KL}}
+\left(
+q_{\phi}(z \mid x)
+\|
+p(z)
+\right)
+}
 $$
 
-The decoder is deterministic: given $z$, it produces exactly one output $\hat{x}$.
+In optimization, this is the negative evidence lower bound up to convention.
 
 ---
 
-## 6. Loss Function
+## 6. Reconstruction Term
 
+The reconstruction term depends on the data type.
 
-The VAE loss combines reconstruction accuracy with distribution regularization:
-
-$$
-\mathcal{L} = \underbrace{\mathbb{E}_{q(z|x)}[\|x - \hat{x}\|^2]}_{\text{Reconstruction}} + \underbrace{D_{\text{KL}}(q(z|x) \,\|\, p(z))}_{\text{KL Divergence}}
-$$
-
-### Reconstruction Term
+For continuous data:
 
 $$
-\mathcal{L}_{\text{recon}} = \frac{1}{N} \sum_{i=1}^N \|x_i - \hat{x}_i\|^2
+\mathcal{L}_{\mathrm{recon}}
+=
+\left\|
+x-\hat{x}
+\right\|_2^2
 $$
 
-Minimizes the squared error between input and reconstruction.
+For Bernoulli-style binary pixels, binary cross entropy is common.
 
-### KL Divergence Term
-
-For $p(z) = \mathcal{N}(0, I)$ and $q(z|x) = \mathcal{N}(\mu, \text{diag}(\sigma^2))$:
-
-$$
-D_{\text{KL}}(q \,\|\, p) = \frac{1}{2} \sum_{j=1}^d \left( \mu_j^2 + \sigma_j^2 - \log \sigma_j^2 - 1 \right)
-$$
-
-Pushes the learned distribution toward standard Gaussian.
+This term asks the decoder to preserve information about $x$ through $z$.
 
 ---
-## 8. Code:
 
+## 7. KL Divergence Term
 
-https://keras.io/examples/generative/vae/
-(5 minutes reading of the code to understand what's happening here):
+For:
+
+$$
+q_{\phi}(z \mid x)
+=
+\mathcal{N}
+\left(
+\mu,
+\operatorname{diag}
+\left(
+\sigma^2
+\right)
+\right)
+$$
+
+and:
+
+$$
+p(z)=\mathcal{N}(0,I)
+$$
+
+the KL divergence has a closed form:
+
+$$
+\boxed{
+D_{\mathrm{KL}}(q\|p)
+=
+\frac{1}{2}
+\sum_{j=1}^{k}
+\left(
+\mu_j^2
++
+\sigma_j^2
+-
+\log \sigma_j^2
+-
+1
+\right)
+}
+$$
+
+This term discourages the encoder from placing latent codes arbitrarily far from the standard normal prior.
+
+---
+
+## 8. The Trade-Off
+
+The reconstruction term wants $z$ to preserve information.
+
+The KL term wants $q_{\phi}(z \mid x)$ to stay close to $\mathcal{N}(0,I)$.
+
+If KL is too weak:
+
+- reconstructions may improve;
+- latent space may become irregular;
+- random sampling may produce poor generations.
+
+If KL is too strong:
+
+- latent codes may ignore the input;
+- reconstructions may become blurry or generic;
+- posterior collapse can occur.
+
+> [!WARNING]
+> A VAE is not just an autoencoder with noise. The KL term fundamentally changes what the latent space is allowed to look like.
+
+---
+
+## 9. Latent Space Visualization
+
 ![](./img/z0z1.jpg)
+
+For a two-dimensional latent space, each input can be represented by $\mu_{\phi}(x)$.
+
+Useful inspections:
+
+- plot latent means by class label;
+- sample a grid of $z$ values and decode them;
+- interpolate between two latent points;
+- inspect whether nearby points decode to nearby-looking outputs.
+
 ![](./img/z0z1b.jpg)
 
+Smooth latent structure is one of the main reasons VAEs are useful.
 
 ---
 
-## 9. Comparison: Autoencoder vs. VAE
+## 10. Autoencoder Versus VAE
 
-| Aspect | Autoencoder | VAE |
-|--------|-------------|-----|
-| Encoder output | Single point $z \in \mathbb{R}^d$ | Distribution parameters $(\mu, \log \sigma^2) \in \mathbb{R}^{2d}$ |
-| Latent representation | Deterministic | Probabilistic |
-| Sampling during training | No | Yes |
-| Latent space structure | Unregularized | Regularized to $\mathcal{N}(0, I)$ |
-| Generation capability | None | Strong |
-| Interpolation | Unreliable | Smooth and meaningful |
-| Loss function | Reconstruction only | Reconstruction + KL divergence |
+| Aspect | Autoencoder | Variational Autoencoder |
+| --- | --- | --- |
+| Encoder output | Point $z$ | Distribution parameters $\mu$ and $\log\sigma^2$ |
+| Latent code | Deterministic | Stochastic during training |
+| Latent prior | Not explicit | Usually $\mathcal{N}(0,I)$ |
+| Loss | Reconstruction only | Reconstruction plus KL |
+| Generation | Not reliable by default | Sample from prior and decode |
+| Latent structure | Unconstrained | Regularized |
+
+---
+
+## 11. Relationship to Other Generative Models
+
+![](./img/genarative.gif)
+
+VAEs are one family of generative models.
+
+Compared with GANs, VAEs usually have:
+
+- more explicit probabilistic structure;
+- easier training;
+- blurrier samples for image tasks;
+- a useful latent space.
+
+Compared with diffusion models, VAEs are usually:
+
+- faster to sample;
+- less powerful for high-fidelity image generation;
+- useful as compression modules inside larger systems.
+
+Diffusion models generate by gradually denoising:
+
+$$
+\text{noise}
+\rightarrow
+\text{less noisy sample}
+\rightarrow
+\text{data}
+$$
+
+This is a different generative mechanism from the VAE prior-and-decoder structure.
+
+---
+
+## 12. Summary
+
+VAEs make latent space probabilistic.
+
+The core idea is:
+
+$$
+\boxed{
+x
+\rightarrow
+q_{\phi}(z \mid x)
+\rightarrow
+z
+\rightarrow
+\hat{x}
+}
+$$
+
+The next lecture focuses on the key technical device that makes VAE training possible: the reparameterization trick.

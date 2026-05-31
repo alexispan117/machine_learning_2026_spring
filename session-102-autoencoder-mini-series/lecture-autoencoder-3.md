@@ -1,194 +1,357 @@
-# The Reparameterization Trick in Variational Autoencoders
+# The Reparameterization Trick
+
+The reparameterization trick lets gradients flow through stochastic latent sampling in variational autoencoders.
 
 ![](./img/z1.jpg)
 
 ---
 
-## 1. Motivation
+## 1. The Training Problem
 
-In a **Variational Autoencoder (VAE)**, the encoder  produces a *distribution*:
+In a VAE, the encoder predicts:
 
 $$
-q_\phi(z \mid x) = \mathcal{N}(\mu(x), \sigma^2(x))
+q_{\phi}(z \mid x)
+=
+\mathcal{N}
+\left(
+\mu_{\phi}(x),
+\operatorname{diag}
+\left(
+\sigma_{\phi}^2(x)
+\right)
+\right)
 $$
 
-However, this also introduces a fundamental challenge during training.
+Then we sample:
+
+$$
+z \sim q_{\phi}(z \mid x)
+$$
+
+The decoder reconstructs:
+
+$$
+\hat{x}=g_{\theta}(z)
+$$
+
+The problem is that naive sampling creates a stochastic node between encoder outputs and the loss.
 
 ---
 
-## 2. The Core Problem: Sampling Breaks Backpropagation
+## 2. Why Naive Sampling Blocks Learning
 
-To generate a latent code, we sample:
-
-$$
-z \sim \mathcal{N}(\mu, \sigma^2)
-$$
-
-This step is **stochastic**, not deterministic.
-
-Backpropagation requires computing gradients:
+The loss depends on the sampled latent variable:
 
 $$
-\frac{\partial L}{\partial \mu}, \quad \frac{\partial L}{\partial \sigma}
+\mathcal{L}
+=
+\mathcal{L}
+\left(
+\hat{x},
+x
+\right)
 $$
 
-But the sampling operation does not define a smooth function from $(\mu, \sigma)$ to $z$.
+and:
 
-### Issue
+$$
+\hat{x}=g_{\theta}(z)
+$$
 
-* **Sampling behaves like a random draw from a distribution**
-* **There is no explicit formula mapping inputs to outputs**
-* Therefore, gradients cannot pass through this operation
+But if we treat:
 
-This leads to:
+$$
+z \sim \mathcal{N}(\mu,\sigma^2)
+$$
 
-> **A broken computational graph — the encoder cannot learn.**
+as an opaque random draw, it is not a deterministic differentiable function of $\mu$ and $\sigma$.
+
+Backpropagation needs gradients such as:
+
+$$
+\frac{\partial \mathcal{L}}{\partial \mu}
+$$
+
+and:
+
+$$
+\frac{\partial \mathcal{L}}{\partial \sigma}
+$$
+
+Naive sampling hides the path those gradients should use.
 
 ---
 
-## 3. Intuition: Why This Is a Problem
+## 3. Separate Randomness from Parameters
 
-Consider the forward process:
+The trick is to sample noise from a fixed distribution:
 
 $$
-x \rightarrow (\mu, \sigma) \rightarrow z \rightarrow \hat{x} \rightarrow L
+\epsilon \sim \mathcal{N}(0,I)
 $$
 
-During backpropagation:
+Then construct:
 
-* Gradients flow from $L$ to $\hat{x}$
-* From $\hat{x}$ to $z$
-* But they **stop at the *sampling* step**
+$$
+\boxed{
+z = \mu + \sigma \odot \epsilon
+}
+$$
 
-This means:
-
-* $\mu$ and $\sigma$ are not updated properly
-* The model cannot learn a meaningful latent distribution
-
----
-
-## 4. Idea: Separate Randomness from Parameters
-
-
-
-The breakthrough is simple but powerful:
-
-> Move the source of randomness *outside* the network.
-
-Instead of sampling directly from $\mathcal{N}(\mu, \sigma^2)$, we rewrite the process.
-
----
-
-## 5. The Reparameterization Trick
+Now randomness comes from $\epsilon$, while $\mu$ and $\sigma$ appear in a deterministic differentiable formula.
 
 ![](./img/z3.jpg)
 
-
-We introduce an auxiliary random variable:
-
-$$
-\varepsilon \sim \mathcal{N}(0, I)
-$$
-
-and define:
-
-$$
-z = \mu + \sigma \odot \varepsilon
-$$
-
 ---
 
-### Why This Works
+## 4. Gradient Flow
 
-Now the process is decomposed into:
+After reparameterization:
 
-1. **Randomness**:
-   $$
-   \varepsilon \sim \mathcal{N}(0, I)
-   $$
+$$
+z(\mu,\sigma,\epsilon)
+=
+\mu+\sigma\odot\epsilon
+$$
 
-2. **Deterministic transformation**:
-   $$
-   z = \mu + \sigma \odot \varepsilon
-   $$
+For a fixed sampled $\epsilon$:
 
-This transformation is fully differentiable.
+$$
+\frac{\partial z}{\partial \mu}=1
+$$
 
----
+and:
 
-## 6. Gradient Flow Restored
+$$
+\frac{\partial z}{\partial \sigma}=\epsilon
+$$
 
+This restores a differentiable computational path from the reconstruction loss back into the encoder.
 
 ![](./img/z2.jpg)
 
-Now we can compute:
+---
+
+## 5. Log Variance Form
+
+Implementations usually predict log variance:
 
 $$
-\frac{\partial z}{\partial \mu} = 1, \quad
-\frac{\partial z}{\partial \sigma} = \varepsilon
+\ell = \log \sigma^2
 $$
 
-This means:
+Then:
 
-* Gradients can flow through $z$
-* $\mu$ and $\sigma$ receive learning signals
-* The encoder becomes trainable
+$$
+\sigma
+=
+\exp
+\left(
+\frac{1}{2}\ell
+\right)
+$$
+
+Sampling becomes:
+
+$$
+\boxed{
+z
+=
+\mu
++
+\exp
+\left(
+\frac{1}{2}\ell
+\right)
+\odot
+\epsilon
+}
+$$
+
+This avoids directly predicting a positive standard deviation.
 
 ---
 
-## 7. Geometric Interpretation
+## 6. PyTorch Implementation
 
-Think of the transformation as:
+```python
+def reparameterize(mu, log_var):
+    std = torch.exp(0.5 * log_var)
+    eps = torch.randn_like(std)
+    z = mu + std * eps
+    return z
+```
 
-* $\varepsilon$ defines a **standard Gaussian space**
-* $\mu$ shifts the distribution (translation)
-* $\sigma$ scales the distribution (stretching)
+This code corresponds exactly to:
 
-So we are no longer sampling “inside” the network. Instead, we:
+$$
+z
+=
+\mu
++
+\exp
+\left(
+\frac{1}{2}\log\sigma^2
+\right)
+\odot
+\epsilon
+$$
 
-> Sample noise, then *shape it* using learnable parameters.
+The sampled tensor `eps` has no learnable parameters. The gradient flows through `mu` and `std`.
 
 ---
 
-## 8. Computational Graph Perspective
+## 7. VAE Forward Pass
 
-Recall the VAE loss:
+A minimal VAE forward pass has this structure:
 
-$$
-\mathcal{L} = \underbrace{\mathbb{E}_{q(z|x)}[\|x - \hat{x}\|^2]}_{\text{Reconstruction}} + \underbrace{D_{\text{KL}}(q(z|x) \,\|\, p(z))}_{\text{KL Divergence}}
-$$
+```python
+def forward(self, x):
+    hidden = self.encoder(x)
+    mu = self.mu_head(hidden)
+    log_var = self.log_var_head(hidden)
+    z = reparameterize(mu, log_var)
+    x_hat = self.decoder(z)
+    return x_hat, mu, log_var
+```
 
-The expectation term requires sampling $z$.
-
-
-### Before (Problematic)
-
-$$
-z = \text{Sample}(\mu, \sigma)
-$$
-
-* Non-differentiable node
-* Gradient flow blocked
-
-### After (Reparameterized)
-
-$$
-z = \mu + \sigma \odot \varepsilon
-$$
-
-* Fully differentiable path
-* Compatible with backpropagation
+The model returns $\mu$ and $\log\sigma^2$ because the loss needs them for the KL term.
 
 ---
 
-## 9. Practical Notes
+## 8. VAE Loss in Code
 
-* In implementation, we often predict $\log \sigma^2$ instead of $\sigma$ for numerical stability
-* Then compute:
-  $$
-  \sigma = \exp(0.5 \cdot \log \sigma^2)
-  $$
-* Sampling becomes:
-  $$
-  z = \mu + \exp(0.5 \cdot \log \sigma^2) \odot \varepsilon
-  $$
+The VAE loss combines reconstruction and KL divergence:
+
+$$
+\mathcal{L}
+=
+\mathcal{L}_{\mathrm{recon}}
++
+D_{\mathrm{KL}}
+\left(
+q_{\phi}(z \mid x)
+\|
+p(z)
+\right)
+$$
+
+For diagonal Gaussian posterior and standard normal prior:
+
+$$
+D_{\mathrm{KL}}(q\|p)
+=
+\frac{1}{2}
+\sum_{j=1}^{k}
+\left(
+\mu_j^2
++
+\sigma_j^2
+-
+\log\sigma_j^2
+-
+1
+\right)
+$$
+
+Using `log_var`, this can be implemented as:
+
+```python
+def vae_loss(x_hat, x, mu, log_var):
+    recon = F.binary_cross_entropy(x_hat, x, reduction="sum")
+    kl = 0.5 * torch.sum(
+        mu.pow(2) + log_var.exp() - log_var - 1
+    )
+    return recon + kl
+```
+
+---
+
+## 9. Common Debugging Checks
+
+When training a VAE, inspect:
+
+- reconstruction samples;
+- random samples from $z \sim \mathcal{N}(0,I)$;
+- interpolation between latent points;
+- average reconstruction loss;
+- average KL divergence;
+- ranges of $\mu$ and $\log\sigma^2$;
+- whether the decoder ignores $z$.
+
+> [!WARNING]
+> If the KL term collapses to nearly zero and reconstructions ignore the latent code, the model may have posterior collapse. This is common with powerful decoders.
+
+---
+
+## 10. Latent Interpolation
+
+Latent interpolation checks whether the learned space is smooth.
+
+Given two latent points $z_a$ and $z_b$, interpolate:
+
+$$
+z(t)
+=
+(1-t)z_a + tz_b
+$$
+
+where:
+
+$$
+t \in [0,1]
+$$
+
+Decode each $z(t)$ and inspect whether outputs change smoothly.
+
+The folder includes interpolation examples such as:
+
+```text
+latent-space-interpolation/digit_1_to_2.gif
+latent-space-interpolation/digit_5_to_9.gif
+```
+
+---
+
+## 11. Why This Trick Matters
+
+The reparameterization trick changes:
+
+$$
+z \sim \mathcal{N}(\mu,\sigma^2)
+$$
+
+into:
+
+$$
+z = \mu + \sigma \odot \epsilon,
+\quad
+\epsilon \sim \mathcal{N}(0,I)
+$$
+
+The distribution is the same, but the computational graph is trainable.
+
+---
+
+## 12. Summary
+
+The reparameterization trick is the bridge between probabilistic sampling and gradient-based learning.
+
+The central formula is:
+
+$$
+\boxed{
+z
+=
+\mu
++
+\sigma
+\odot
+\epsilon,
+\qquad
+\epsilon \sim \mathcal{N}(0,I)
+}
+$$
+
+Without this trick, the VAE encoder would not receive a useful reconstruction gradient through sampled latent variables.

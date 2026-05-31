@@ -1,484 +1,370 @@
-# AutoEncoders, Variational AutoEncoders, and Diffusion Models
+# Autoencoders
 
+Autoencoders learn useful representations by compressing an input into a latent code and reconstructing the original input from that code.
 
-Online Visualization:
+Online visualizations:
+
 - https://introduction-to-autoencoders.vercel.app/
 - https://anomagram.fastforwardlabs.com/
 
+![](./img/ae.png)
 
 ---
 
-# 1. Unsupervised Learning
+## 1. Why Autoencoders
 
-![](./img/su.jpg)
+Many machine-learning tasks need representations, not only predictions.
 
-In many machine learning tasks, the goal is not only prediction but also **learning useful representations of data**.
+We may want to:
 
-Why do we want this?
+- compress data;
+- remove noise;
+- detect anomalies;
+- learn features for downstream models;
+- visualize latent structure;
+- prepare for generative modeling.
 
-* dimensionality reduction
-* noise removal
-* feature extraction
-* generative modeling
+Autoencoders provide a neural-network version of dimensionality reduction.
 
-Traditional method:
+The central idea is:
 
-* PCA
-
-Neural network alternative:
-
-- **AutoEncoders**
+$$
+\boxed{
+\text{learn a representation by reconstructing the input}
+}
+$$
 
 ---
 
-# 2. AutoEncoder
+## 2. Notation
 
-## Basic Architecture
+We use a row-vector convention:
 
-![](img/ae.png)
+- $n$: number of examples.
+- $d$: input dimension.
+- $k$: latent dimension.
+- $X \in \mathbb{R}^{n \times d}$: input data matrix.
+- $x^{(i)} \in \mathbb{R}^{1 \times d}$: one input example.
+- $z^{(i)} \in \mathbb{R}^{1 \times k}$: latent code.
+- $\hat{x}^{(i)} \in \mathbb{R}^{1 \times d}$: reconstruction.
 
-An **AutoEncoder** is a neural network trained to reconstruct its input.
-
-Encoder
-
-$$
-z = f(x)
-$$
-
-Decoder
+For images such as MNIST, a $28 \times 28$ image is often flattened into:
 
 $$
-\hat{x} = g(z)
+x^{(i)} \in \mathbb{R}^{1 \times 784}
 $$
-
 
 ---
 
-## Training Objective
+## 3. Encoder and Decoder
 
-![](./img/aec.jpg)
+An autoencoder has two parts.
 
-The model learns by minimizing the reconstruction error.
+The encoder maps input to latent code:
 
-$$\mathcal{L} = \|x - \hat{x}\|^2$$
+$$
+z = f_{\theta}(x)
+$$
 
-Where:
+The decoder maps latent code back to input space:
 
-* \(x\) = original input
-* \(\hat{x}\) = reconstructed input
+$$
+\hat{x} = g_{\phi}(z)
+$$
+
+The full model is:
+
+$$
+\boxed{
+\hat{x}
+=
+g_{\phi}
+\left(
+f_{\theta}(x)
+\right)
+}
+$$
+
+The parameters $\theta$ and $\phi$ are learned by minimizing reconstruction error.
 
 ---
 
-## Example Architecture
+## 4. Bottleneck Architecture
 
+![](./img/04_simple.png)
+
+A simple fully connected autoencoder for MNIST might have shape:
+
+```text
+784 -> 128 -> 32 -> 128 -> 784
 ```
-784 → 128 → 32 → 128 → 784
-```
 
-The **32-dimensional vector** is the latent representation.
+The layer of size $32$ is the bottleneck.
 
-This bottleneck forces the model to **learn meaningful compressed features**.
+If $k < d$, the model cannot simply copy every coordinate through a wide hidden representation. It must learn a compressed representation that preserves information useful for reconstruction.
+
+> [!INFO]
+> A bottleneck is not only a smaller layer. It is a design pressure that forces the network to decide which information is worth preserving.
 
 ---
 
-# 3. Simple PyTorch AutoEncoder (Idea Level)
+## 5. Reconstruction Loss
 
-Example architecture:
+For continuous inputs, a common loss is mean squared reconstruction error:
+
+$$
+\boxed{
+\mathcal{L}_{\mathrm{recon}}
+=
+\frac{1}{n}
+\sum_{i=1}^{n}
+\left\|
+x^{(i)}-\hat{x}^{(i)}
+\right\|_2^2
+}
+$$
+
+For binary or normalized pixel data, binary cross entropy can also be used:
+
+$$
+\mathcal{L}_{\mathrm{BCE}}
+=
+-
+\frac{1}{n}
+\sum_{i=1}^{n}
+\sum_{j=1}^{d}
+\left[
+x_j^{(i)}\log \hat{x}_j^{(i)}
++
+\left(1-x_j^{(i)}\right)
+\log
+\left(1-\hat{x}_j^{(i)}\right)
+\right]
+$$
+
+The loss should match the data type and decoder output activation.
+
+---
+
+## 6. Training Loop
+
+The training pipeline is:
+
+```text
+input x
+encoder produces z
+decoder produces x_hat
+compare x_hat with x
+backpropagate reconstruction loss
+update encoder and decoder
+```
+
+Minimal PyTorch shape:
 
 ```python
-import torch
-import torch.nn as nn
-
 class AutoEncoder(nn.Module):
-
-    def __init__(self):
+    def __init__(self, latent_dim=32):
         super().__init__()
-
         self.encoder = nn.Sequential(
             nn.Linear(784, 128),
             nn.ReLU(),
-            nn.Linear(128, 32)
+            nn.Linear(128, latent_dim),
         )
-
         self.decoder = nn.Sequential(
-            nn.Linear(32, 128),
+            nn.Linear(latent_dim, 128),
             nn.ReLU(),
-            nn.Linear(128, 784)
+            nn.Linear(128, 784),
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
-
         z = self.encoder(x)
         x_hat = self.decoder(z)
-
         return x_hat
 ```
 
-Training loop (conceptual):
+Conceptual training loop:
 
 ```python
-model = AutoEncoder()
-criterion = nn.MSELoss()
-
 for x in data_loader:
+    x_hat = model(x)
+    loss = criterion(x_hat, x)
 
-    reconstruction = model(x)
-
-    loss = criterion(reconstruction, x)
-
+    optimizer.zero_grad()
     loss.backward()
     optimizer.step()
 ```
 
----
-
-# 4. Applications of AutoEncoders
-
-AutoEncoders are widely used in many real-world problems.
+> [!WARNING]
+> Do not forget `optimizer.zero_grad()`. Accumulated gradients can make training behavior confusing and unstable.
 
 ---
 
-# 4.1 Dimensionality Reduction
+## 7. Denoising Autoencoders
 
-AutoEncoders can learn **nonlinear dimensionality reduction**, unlike PCA.
+![](./img/denoise.gif)
 
-Idea:
+A denoising autoencoder receives corrupted input but reconstructs the clean input.
 
-```
-784 → 32
-```
-
-The latent vector can be used as features for other models.
-
-Example pipeline:
-
-```
-Image → Encoder → 32 features → classifier
-```
-
-Python idea:
-
-```python
-with torch.no_grad():
-    features = encoder(images)
-
-classifier.fit(features, labels)
-```
-
-Applications:
-
-* image compression
-* feature extraction
-* visualization
-
----
-
-# 4.2 Denoising AutoEncoder
-
-![](img/denoise.gif)
-
-Idea:
-
-Train the model to **remove noise from corrupted inputs**.
-
-Training data:
-
-```
-noisy image → clean image
-```
-
-Example:
-
-```
-Input: noisy digit
-Output: clean digit
-```
-
-Loss:
+Training pair:
 
 $$
-\mathcal{L} = \|x_{clean} - \hat{x}\|^2
+x_{\mathrm{noisy}} = x + \epsilon
 $$
 
+The model predicts:
+
+$$
+\hat{x}
+=
+g_{\phi}
+\left(
+f_{\theta}(x_{\mathrm{noisy}})
+\right)
+$$
+
+The loss compares against the clean target:
+
+$$
+\mathcal{L}
+=
+\left\|
+x-\hat{x}
+\right\|_2^2
+$$
 
 ![](./img/autoencoderdenoising.jpg)
 
-Python idea:
-
-```python
-noise = torch.randn_like(x) * 0.2
-x_noisy = x + noise
-
-reconstruction = model(x_noisy)
-
-loss = mse_loss(reconstruction, x)
-```
-
-Applications:
-
-* image restoration
-* medical imaging
-* speech enhancement
+This teaches the latent representation to preserve stable structure and ignore noise.
 
 ---
 
-# 4.3 Anomaly Detection with AutoEncoders
+## 8. Anomaly Detection
 
-- https://anomagram.fastforwardlabs.com/
+![](./img/anomagram.gif)
 
-AutoEncoders are very effective for **detecting outliers**.
+Anomaly detection uses reconstruction error as a score.
 
-Idea:
-
-Train the model **only on normal data**.
-
-At inference time:
-
-```
-normal data → small reconstruction error
-abnormal data → large reconstruction error
-```
-
-Reconstruction error:
+Train the autoencoder mostly or only on normal data. At inference:
 
 $$
-E(x) = \|x - \hat{x}\|^2
+E(x)
+=
+\left\|
+x-\hat{x}
+\right\|_2^2
 $$
 
-If
+Then classify as anomalous if:
 
 $$
-E(x) > threshold
+E(x) > \tau
 $$
 
-then
+where $\tau$ is a chosen threshold.
 
-```
-anomaly detected
-```
+Normal examples reconstruct well because the model has learned their structure. Abnormal examples may reconstruct poorly.
+
+> [!WARNING]
+> Reconstruction error is not a perfect anomaly detector. A powerful autoencoder may reconstruct some anomalies well, especially if the bottleneck is too large.
 
 ---
 
-## Example: Credit Card Fraud Detection
+## 9. Latent Representations
 
-Train on **normal transactions**.
-
-Fraudulent transactions will reconstruct poorly.
-
-Python idea:
-
-```python
-reconstruction = model(x)
-
-error = torch.mean((x - reconstruction) ** 2, dim=1)
-
-anomaly = error > threshold
-```
-
-Applications:
-
-* credit card fraud detection
-* network intrusion detection
-* manufacturing defect detection
-* medical anomaly detection
-
----
-
-# 4.4 Representation Learning
-
-The latent vector can capture **semantic features**.
-
-Example:
-
-```
-image → latent vector
-```
-
-This vector may represent:
-
-* shape
-* texture
-* style
-
-Applications:
-
-* clustering
-* downstream ML tasks
+The latent vector $z$ can be used as a learned feature representation.
 
 Example pipeline:
 
-```python
-z = encoder(x)
-
-kmeans.fit(z)
+```text
+image -> encoder -> latent vector -> classifier or clustering method
 ```
+
+Latent dimensions may capture:
+
+- shape;
+- stroke thickness;
+- orientation;
+- style;
+- other factors useful for reconstruction.
+
+The latent representation is learned without labels, but it may still be useful for supervised or unsupervised downstream tasks.
 
 ---
 
-# 4.5. Linear Autoencoders and the PCA Connection
+## 10. Linear Autoencoders and PCA
 
-When we remove nonlinear activations, something remarkable happens.
+If the encoder and decoder are linear and the loss is squared reconstruction error, an undercomplete autoencoder learns a subspace closely connected to PCA.
 
-### Setup
-
-- Encoder: $z = x W_e$ (linear projection)
-- Decoder: $\hat{x} = z W_d$ (linear reconstruction)
-- Loss: $\|x - \hat{x}\|^2$
-
-### The Optimal Solution
-
-The solution satisfies:
+Linear encoder:
 
 $$
-W_d = W_e^T
+z = xW_e
 $$
 
-and the rows of $W_e$ span the **top-$d$ principal components** of the data.
+Linear decoder:
 
-**In other words: linear autoencoders learn PCA.**
+$$
+\hat{x}=zW_d
+$$
 
-### Significance
+Training minimizes:
 
-This provides an anchor point:
-- PCA finds directions of maximum variance
-- Linear autoencoders find the same directions through gradient descent
-- Nonlinear autoencoders generalize this to curved manifolds
+$$
+\left\|
+x-\hat{x}
+\right\|_2^2
+$$
 
-The autoencoder is gradient descent's answer to dimensionality reduction.
+The optimal reconstruction subspace matches the top principal-component subspace.
 
-```python
-# PCA as a baseline: compare with linear autoencoder
-from sklearn.decomposition import PCA
+This gives an important anchor:
 
-# 1. Standard PCA approach
-pca = PCA(n_components=32)
-X_reduced = pca.fit_transform(images.flatten(start_dim=1))
-X_reconstructed_pca = pca.inverse_transform(X_reduced)
-
-# 2. Linear Autoencoder reconstruction
-# The MSE of a fully trained Linear AE should converge 
-# to the same value as the PCA reconstruction error.
-```
+- PCA is linear dimensionality reduction.
+- Linear autoencoders recover the PCA subspace.
+- Nonlinear autoencoders generalize the idea to nonlinear representations.
 
 ---
 
-
-# 5. Overcomplete AutoEncoders
+## 11. Overcomplete Autoencoders
 
 ![](./img/overcomplete.jpg)
 
----
+An overcomplete autoencoder has latent dimension $k \ge d$.
 
-# 6. Variational AutoEncoder (VAE)
-
-![](img/vae2.png)
-
-Standard AutoEncoders map inputs to a **point in latent space**.
-
-Problem:
-
-The latent space is not structured.
-
-Solution:
-
-**Variational AutoEncoder**
-
-Key idea:
-
-Encode inputs into a **distribution**.
-
-Encoder outputs:
+This can be dangerous because the model may learn an identity map:
 
 $$
-\mu(x), \sigma(x)
+\hat{x} \approx x
 $$
 
-Latent variable:
+without learning useful structure.
 
-$$
-z \sim \mathcal{N}(\mu, \sigma^2)
-$$
+To make overcomplete autoencoders meaningful, we usually add constraints:
 
-
-![](img/vae.png)
+- sparsity;
+- denoising;
+- dropout;
+- weight decay;
+- contractive penalties;
+- architectural bottlenecks elsewhere.
 
 ---
 
-## VAE Loss
+## 12. Summary
 
-Two components:
+Autoencoders learn representations through reconstruction.
 
-* reconstruction loss
-* KL divergence regularization
-
-$$
-\mathcal{L} = \underbrace{\mathbb{E}_{q(z|x)}[\|x - \hat{x}\|^2]}_{\text{Reconstruction}} + \underbrace{D_{\text{KL}}(q(z|x) \,\|\, p(z))}_{\text{KL Divergence}}
-$$
-
-
-The KL term encourages latent vectors to follow a **normal distribution**.
-
----
-
-## Why This Matters
-
-Because now we can sample:
-
-```
-z ~ N(0,1)
-decode(z)
-```
-
-This enables **data generation**.
-
-[For more AE vs VAE, checkout lecture-autoencoder-2.md.](./lecture-autoencoder-2.md)
-
----
-
-# 7. Diffusion Models
-
-
-Used by systems like
-
-* Stable Diffusion
-* DALL·E
-* Midjourney
-
----
-
-## Core Idea
-
-![](./img/diffusion.jpg)
-
-
-Generate data by **gradually removing noise**.
-
-Two stages:
-
-### Forward diffusion
-
-Add noise step by step.
+The core computation is:
 
 $$
-x_t = \sqrt{\alpha_t} x_{t-1} + \sqrt{1-\alpha_t} \epsilon
+\boxed{
+x
+\rightarrow
+z=f_{\theta}(x)
+\rightarrow
+\hat{x}=g_{\phi}(z)
+}
 $$
 
-Eventually the data becomes **pure noise**.
-
-```
-image → noise
-```
-
----
-
-### Reverse diffusion
-
-A neural network learns to **remove noise** step by step.
-
-```
-noise → image
-```
-
-The model predicts the noise at each step.
-
-![](./img/df.jpg)
+The next lecture moves from deterministic latent codes to probabilistic latent variables in variational autoencoders.
