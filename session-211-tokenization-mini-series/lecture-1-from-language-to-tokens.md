@@ -1,233 +1,275 @@
 # From Language to Tokens
 
+Tokenization is the interface that turns raw text into the discrete IDs a language model can process.
 
-Online Tokenizer visualization:
+Online tokenizer visualization:
+
 - https://tiktokenizer.vercel.app/?model=gpt2
 
-![](./img/embedding-the-cat-sat-on-a-mat.jpg)
+![](./img/tokenization-summary.jpg)
 
 ---
 
 ## 1. The Fundamental Constraint
 
-All neural networks operate on numbers, not strings.
+Neural networks operate on numbers, not strings.
 
-A Transformer does not “see” words or sentences. It receives a sequence of discrete symbols:
+A transformer does not directly receive a sentence. It receives a sequence of integer token IDs:
 
 $$
-\text{input} = [x_1, x_2, \dots, x_T], \quad x_t \in \{0,1,\dots, V-1\}
+x_1, x_2, \ldots, x_T
 $$
 
 where:
 
-* $T$ is the sequence length
-* $V$ is the vocabulary size
-* each $x_t$ is an integer index
+- $T$ is the token sequence length;
+- $V$ is the vocabulary size;
+- each token ID satisfies $x_t \in \{0,1,\ldots,V-1\}$.
 
-This immediately imposes a requirement:
+The required pipeline is:
 
 $$
-\text{text} \;\longrightarrow\; \text{discrete tokens} \;\longrightarrow\; \text{integer IDs}
+\boxed{
+\text{text}
+\rightarrow
+\text{tokens}
+\rightarrow
+\text{token IDs}
+\rightarrow
+\text{embeddings}
+\rightarrow
+\text{model}
+}
 $$
 
-This transformation is not optional. It is the **entry point** of all language models.
-
-We call this transformation **tokenization**.
+Tokenization is not optional. It is the entry point of language modeling.
 
 ---
 
 ## 2. Tokenization as an Interface
 
-Tokenization is best understood as an **interface layer** between human language and machine computation.
+A tokenizer has two related jobs.
 
-The full pipeline is:
+First, it segments text into tokens:
 
 $$
-\text{text} \;\rightarrow\; \text{tokens} \;\rightarrow\; \text{IDs} \;\rightarrow\; \text{embeddings} \;\rightarrow\; \text{Transformer}
+\operatorname{Tok}(s)
+=
+(t_1,t_2,\ldots,t_T)
 $$
 
-Each stage serves a precise role:
+where $s$ is a text string and $t_i$ is the $i$-th token.
 
-1. **Tokenizer**
-   Splits raw text into discrete units (tokens)
+Second, it maps tokens to integer IDs:
 
-2. **Vocabulary**
-   Maps each token to a unique integer ID
+$$
+\operatorname{ID}(t_i) = x_i
+$$
 
-3. **Embedding Layer**
-   Converts IDs into continuous vectors
+The vocabulary is the lookup table that makes this mapping possible.
 
-If we denote the embedding table as:
+> [!INFO]
+> In this mini-series, $T$ means sequence length and $V$ means vocabulary size. This convention will stay fixed across the lectures.
+
+---
+
+## 3. From IDs to Embeddings
+
+Token IDs are still discrete symbols. A neural network needs vectors.
+
+Let the embedding matrix be:
 
 $$
 E \in \mathbb{R}^{V \times d}
 $$
 
-then each token is mapped via lookup:
+where $d$ is the embedding dimension.
+
+For token ID $x_t$, the embedding layer selects row $x_t$:
 
 $$
-x_t \;\longrightarrow\; E[x_t] \in \mathbb{R}^{1 \times d}
+e_t = E[x_t] \in \mathbb{R}^{1 \times d}
 $$
 
-At this point, language has been fully converted into geometry.
+The full token sequence becomes an embedding matrix:
+
+$$
+H^{(0)}
+=
+\begin{bmatrix}
+e_1 \\
+e_2 \\
+\vdots \\
+e_T
+\end{bmatrix}
+\in
+\mathbb{R}^{T \times d}
+$$
+
+This is the first vector representation the transformer receives.
 
 ---
 
-## 3. What Is a “Token”?
+## 4. What Counts as a Token
 
 A token is not necessarily a word.
 
-It is a **design choice** that determines how text is decomposed.
-
-Consider the same idea across languages:
-
-| Language | Text         | Tokenization (example)   |
-| -------- | ------------ | ------------------------ |
-| English  | unbelievable | `un` + `believ` + `able` |
-| Chinese  | 我喜欢上海大学      | `我` + `喜欢` + `上海` + `大学` |
-| French   | Je t'aime    | `Je` + `t'` + `aime`     |
-
 Tokens can be:
 
-* full words
-* subwords
-* characters
-* punctuation
-* whitespace markers
+- characters;
+- bytes;
+- whole words;
+- subwords;
+- punctuation;
+- whitespace markers;
+- special formatting markers.
 
-This choice directly affects how the model perceives structure and meaning.
+For example, the word `unbelievable` might be tokenized as:
+
+```text
+un believable
+```
+
+or:
+
+```text
+un believ able
+```
+
+or even as individual characters. The choice changes the sequence length, vocabulary, and model behavior.
+
+A place name can show the same issue. For example, `ShanghaiTech` might become:
+
+```text
+Shanghai Tech
+```
+
+or:
+
+```text
+Shang hai Tech
+```
+
+depending on the tokenizer vocabulary.
 
 ---
 
-## 4. Tokenization Defines the Computational Budget
+## 5. Tokenization and Compute
 
-Self-attention scales as:
+Self-attention has quadratic cost in sequence length:
 
 $$
 O(T^2)
 $$
 
-So the number of tokens $T$ is not just a representation detail — it determines compute cost.
+This means tokenization affects compute directly. If a tokenizer produces more tokens for the same text, the transformer has more positions to attend over.
 
-Different tokenization strategies produce very different sequence lengths:
+| Strategy | Vocabulary Size | Sequence Length | Main Risk |
+| --- | --- | --- | --- |
+| Character-level | Small | Long | Expensive attention |
+| Word-level | Large | Short | Unknown words |
+| Subword-level | Medium | Medium | More complex training and decoding |
 
-| Text                               | Character-level | Word-level | Subword |
-| ---------------------------------- | --------------- | ---------- | ------- |
-| The cat sat                        | 11              | 3          | 3       |
-| unbelievable                       | 12              | 1          | 3       |
-| I love natural language processing | 34              | 5          | 6–8     |
-
-A finer granularity increases $T$, which increases cost quadratically.
-
-A coarser granularity reduces $T$, but harms flexibility.
-
-Tokenization is therefore a **compute–representation trade-off**.
+Tokenization is therefore a trade-off between representation flexibility and computational efficiency.
 
 ---
 
-## 5. The OOV Problem and the Rise of Subwords
+## 6. The Out-of-Vocabulary Problem
 
-A naive word-level vocabulary fails in open-world settings.
+A word-level tokenizer can only represent words in its vocabulary.
 
-Natural language contains:
+If a word is missing, the system may map it to an unknown token:
 
-* rare scientific terms
-* new names and entities
-* typos and noise
-* code and URLs
-* multilingual mixtures
-
-A fixed word vocabulary inevitably produces **out-of-vocabulary (OOV)** tokens.
-
-Subword tokenization solves this by decomposing words into reusable units.
-
-Instead of failing on:
-
-* “pneumonoultramicroscopicsilicovolcanoconiosis”
-
-a subword tokenizer represents it as a sequence of known pieces.
-
-This ensures:
-
-* full coverage
-* compositional generalization
-* robustness to noise
-
-This is why modern LLMs almost universally use **subword tokenization**.
-
----
-
-## 6. Special Tokens as Structural Signals
-
-Tokenization does not only encode content — it also encodes structure.
-
-Most vocabularies include reserved tokens:
-
-| Token            | Role                          |
-| ---------------- | ----------------------------- |
-| `<bos>` / `<s>`  | sequence start                |
-| `<eos>` / `</s>` | sequence end                  |
-| `<pad>`          | padding                       |
-| `<unk>`          | unknown token                 |
-| `<mask>`         | masked prediction             |
-| `[CLS]`, `[SEP]` | classification and separation |
-
-These tokens act as a **hidden grammar**.
-
-They define:
-
-* where sequences begin and end
-* how multiple inputs are separated
-* how tasks are formatted
-
-In modern systems, even conversation is tokenized:
-
-```
-<|system|>...
-<|user|>...
-<|assistant|>...
+```text
+rare_new_name -> <unk>
 ```
 
-The model does not “understand roles” abstractly — it learns them through tokens.
+This destroys information. Many different words collapse into the same ID.
+
+Subword tokenization reduces this problem by representing rare words as smaller known pieces:
+
+```text
+rare_new_name -> rare _ new _ name
+```
+
+The exact split depends on the tokenizer, but the important point is coverage: the model can still receive a usable sequence instead of a single unknown symbol.
+
+> [!WARNING]
+> Unknown-token collapse is not a small nuisance. It can erase names, code, technical terms, typos, and multilingual content.
 
 ---
 
-## 7. Tokenization Is Not Preprocessing — It Is Modeling
+## 7. Special Tokens
 
-Two models with identical Transformer architectures can behave very differently if their tokenizers differ.
+Tokenizers often reserve IDs for structural tokens.
+
+| Token | Common Role |
+| --- | --- |
+| `<bos>` | Beginning of sequence |
+| `<eos>` | End of sequence |
+| `<pad>` | Padding for batching |
+| `<unk>` | Unknown token |
+| `<mask>` | Masked prediction |
+| `[CLS]` | Classification marker |
+| `[SEP]` | Segment separator |
+
+Instruction-tuned and chat models may also use role or boundary tokens, such as system, user, and assistant markers.
+
+These tokens are part of the model's input language. They help define task format, sequence boundaries, and conversation structure.
+
+---
+
+## 8. Vocabulary Size and Parameters
+
+The embedding table contains:
+
+$$
+\boxed{
+Vd
+}
+$$
+
+parameters.
+
+For example, if $V = 50{,}000$ and $d = 768$, then the token embedding matrix has:
+
+$$
+50{,}000 \times 768 = 38{,}400{,}000
+$$
+
+parameters.
+
+A larger vocabulary can shorten sequences, but it increases embedding parameters. A smaller vocabulary reduces embedding parameters, but it can make sequences longer.
+
+---
+
+## 9. Tokenization Is Model Design
+
+Two models with the same transformer architecture can behave differently if their tokenizers differ.
 
 Tokenization determines:
 
-* what counts as a unit of meaning
-* how information is segmented
-* how long sequences become
-* how efficiently the model trains
+- which strings become single units;
+- how long inputs become;
+- how names, numbers, code, and punctuation are represented;
+- which IDs are sent to the embedding table;
+- which input patterns the model sees during training.
 
-In this sense, tokenization is part of the **model design**, not just data cleaning.
+> [!WARNING]
+> A trained model and its tokenizer are a coupled system. Swapping tokenizers usually breaks the meaning of token IDs and the embedding lookup.
 
 ---
 
-## 8. Vocabulary Size and Parameter Trade-offs
+## 10. Summary
 
-The vocabulary size $V$ directly affects model parameters through the embedding table:
+Tokenization converts raw text into the discrete interface required by language models.
+
+The central idea is:
 
 $$
-\text{Embedding parameters} = V \times d
+\boxed{
+\text{text becomes token IDs, and token IDs select embedding vectors}
+}
 $$
 
-Examples:
-
-* GPT-style: $\sim 50\text{K} \times 768$ → tens of millions
-* BERT-base: $\sim 30\text{K} \times 768$
-
-This leads to a trade-off:
-
-| Vocabulary | Effect                                  |
-| ---------- | --------------------------------------- |
-| Small $V$  | longer sequences, cheaper embeddings    |
-| Large $V$  | shorter sequences, expensive embeddings |
-
-The tokenizer therefore shapes both:
-
-* **memory footprint**
-* **runtime cost**
+The next lecture studies the key design choice: how fine or coarse the tokens should be.

@@ -1,84 +1,93 @@
-# BPE vs WordPiece
+# BPE and WordPiece
 
-
-### Subword Tokenization as Learned Vocabulary Construction
-
+BPE and WordPiece are subword tokenization algorithms. Both learn reusable text pieces from a corpus, but they choose pieces using different criteria.
 
 ![](./img/andrejkarpathy.jpg)
 
-
 ---
 
-## 1. The Core Idea
+## 1. Subword Vocabulary Learning
 
-Modern language models do not operate on words directly.
-Instead, they operate on **subword units**.
+Modern language models need a vocabulary that is:
 
-The goal of a tokenizer is to construct a vocabulary that satisfies:
-
-* any input string can be represented
-* sequences are not too long
-* vocabulary size remains manageable
+- expressive enough to represent any input;
+- compact enough to keep embeddings manageable;
+- efficient enough to keep sequences short;
+- stable enough to use during training and inference.
 
 A useful abstraction is:
 
 $$
-\text{Tokenization} = \text{mapping text into reusable subword units}
+\boxed{
+\text{tokenization learns a reusable dictionary of text fragments}
+}
 $$
 
-Both **BPE** and **WordPiece** solve this by **learning a vocabulary through merging**.
+Subword algorithms start with small units and build larger units from corpus statistics.
 
 ---
 
-## 2. A Unified View: Merge-Based Learning
+## 2. Shared Notation
 
-We start from very small units (characters or bytes), and iteratively build larger ones.
+Let:
 
-General procedure:
+- $\mathcal{D}$ be the training corpus;
+- $\mathcal{V}_0$ be the initial vocabulary;
+- $\mathcal{V}$ be the final vocabulary;
+- $M$ be the number of merge steps;
+- $V = |\mathcal{V}|$ be the final vocabulary size.
 
-1. Initialize a base vocabulary $\mathcal{V}_0$
-2. Scan a corpus $\mathcal{D}$
-3. Repeatedly merge pairs of tokens
-4. Stop when target vocabulary size is reached
-
-This can be viewed as learning a dictionary:
+The general pattern is:
 
 $$
-\mathcal{V} = \mathcal{V}_0 \cup \text{merged units}
+\mathcal{V}
+=
+\mathcal{V}_0
+\cup
+\{\text{learned merged tokens}\}
 $$
 
-The key difference between methods lies in **how the merge is chosen**.
+The initial vocabulary may be characters or bytes. Byte-level initialization gives especially strong coverage.
 
 ---
 
-## 3. Byte-Pair Encoding (BPE)
+## 3. Byte-Pair Encoding
 
-### 3.1 Merge Rule
+Byte-pair encoding, or BPE, is frequency-driven.
 
-BPE is **frequency-driven**.
-
-At each step, we select the most frequent adjacent pair:
+At each training step, BPE finds the most frequent adjacent pair of current tokens:
 
 $$
-(a^*, b^*) = \arg\max_{(a,b)} \text{count}(a,b)
+(a^*,b^*)
+=
+\arg\max_{(a,b)}
+\operatorname{count}(a,b)
 $$
 
-and merge it into a new token.
+Then it merges that pair into a new token:
+
+$$
+a^* b^*
+\rightarrow
+a^*b^*
+$$
+
+The process repeats until the target vocabulary size is reached.
 
 ---
 
-### 3.2 Example
+## 4. BPE Example
 
-Corpus:
+Suppose the corpus contains:
 
-```
+```text
 low lower lowest
 new newer newest
 ```
 
-Initial tokens (characters):
+Start from characters:
 
-```
+```text
 l o w
 l o w e r
 l o w e s t
@@ -87,153 +96,174 @@ n e w e r
 n e w e s t
 ```
 
-**Step 1: count pairs**
+If the pair `l o` is frequent, BPE can merge it:
 
-Frequent pairs include:
+```text
+l o -> lo
+```
 
-* $(l, o)$
-* $(o, w)$
-* $(w, e)$
+After recomputing pair counts, `lo w` may become frequent:
 
-Merge $(l, o) \rightarrow lo$
+```text
+lo w -> low
+```
 
-**Step 2: recompute**
+Over many steps, frequent fragments become vocabulary entries.
 
-Now $(lo, w)$ becomes frequent → merge into $low$
-
-Over time, the vocabulary evolves:
-
-$$
-\{l, o, w, \dots\} \rightarrow \{lo, low, \dots\}
-$$
+![](./img/BPE.jpg)
 
 ---
 
-### 3.3 Interpretation
+## 5. BPE Training Algorithm
 
-BPE builds tokens that reflect:
+```text
+Input: corpus, initial vocabulary, target vocabulary size
 
-* frequent substrings
-* common morphemes
-* entire words (if frequent enough)
+while vocabulary is smaller than target size:
+    tokenize corpus using the current units
+    count adjacent token pairs
+    choose the most frequent pair
+    add the merged pair to the vocabulary
+    replace that pair in the corpus representation
 
-It is:
+Output: final vocabulary and ordered merge rules
+```
 
-* simple
-* deterministic
-* purely data-driven
+The ordered merge rules matter. Encoding new text applies learned merges in the learned order.
+
+![](./img/bpe-pseudocode.png)
 
 ---
 
-## 4. WordPiece
+## 6. BPE Strengths and Weaknesses
 
-### 4.1 Objective
+BPE is strong because it is:
 
-WordPiece uses a **likelihood-based perspective**.
+- simple;
+- deterministic after training;
+- efficient to implement;
+- good at compressing frequent strings;
+- robust when initialized from bytes.
 
-Instead of raw frequency, it prefers merges that improve how well the corpus is explained:
+Its weaknesses include:
+
+- merges are based mostly on frequency, not meaning;
+- rare morphology can be split awkwardly;
+- token boundaries may not match linguistic boundaries;
+- different training corpora can produce very different vocabularies.
+
+---
+
+## 7. WordPiece
+
+WordPiece is also a subword vocabulary method, but it is usually explained through a likelihood perspective.
+
+Instead of only asking which pair appears most often, WordPiece asks which vocabulary addition best improves the model's ability to explain the corpus.
+
+Conceptually, it prefers a vocabulary that gives high probability to the corpus:
 
 $$
-\max \sum_{w \in \mathcal{D}} \log P(w \mid \text{subword decomposition})
+\max_{\mathcal{V}}
+\sum_{w \in \mathcal{D}}
+\log P(w \mid \mathcal{V})
 $$
 
-In practice, this is approximated, but conceptually:
-
-* BPE asks: *what appears most often?*
-* WordPiece asks: *what best explains the data?*
-
+In practical descriptions, WordPiece merge scoring is often approximated using statistics that reward pairs which are strongly associated, not merely frequent.
 
 ![](./img/wordpiece-vs-bpe.jpg)
 
-
 ---
 
-### 4.2 Token Structure
+## 8. Continuation Markers
 
-WordPiece introduces **continuation markers**.
+WordPiece often marks whether a subword can begin a word or must continue a word.
 
 Example:
 
-```
-playing → play ##ing
-```
-
-```
-unhappiness → un ##hap ##pi ##ness
+```text
+playing -> play ##ing
 ```
 
-This enforces a structure:
+The token `play` can appear at the start of a word. The token `##ing` indicates a continuation.
 
-* first token = start of word
-* subsequent tokens = continuation
-
----
-
-### 4.3 Interpretation
-
-WordPiece emphasizes:
-
-* probabilistic consistency
-* structured decomposition
-* cleaner reconstruction of words
+This helps preserve word-boundary information.
 
 ---
 
-## 5. Key Differences
+## 9. BPE Versus WordPiece
 
-| Aspect           | BPE                    | WordPiece                   |
-| ---------------- | ---------------------- | --------------------------- |
-| Merge criterion  | frequency              | likelihood (approximate)    |
-| View of training | compression-like       | language modeling-like      |
-| Token structure  | unconstrained          | uses continuation markers   |
-| Typical behavior | builds frequent chunks | builds useful subword units |
+| Aspect | BPE | WordPiece |
+| --- | --- | --- |
+| Main criterion | Frequent adjacent pairs | Approximate likelihood or association |
+| Training view | Compression-like | Language-model-like |
+| Boundary markers | Optional | Commonly uses continuation markers |
+| Typical behavior | Builds frequent chunks | Builds useful subword pieces |
+| Used in | GPT-style tokenizers, many others | BERT-style tokenizers |
+
+The outputs can look similar, but the training logic is not identical.
 
 ---
 
-## 6. A Deeper Perspective
+## 10. Encoding New Text
 
-Both methods can be understood as solving:
+After training, the tokenizer must encode text that was not in the training corpus.
+
+For BPE, encoding uses the learned merge list:
+
+```text
+start from base units
+apply learned merges in order when possible
+return the final token sequence
+```
+
+For WordPiece, encoding often uses a greedy longest-match strategy:
+
+```text
+at each word position, choose the longest vocabulary piece that fits
+continue until the word is consumed
+```
+
+If no piece is available, the tokenizer may use `<unk>`, unless the tokenizer has byte-level or character-level fallback.
+
+---
+
+## 11. System Coupling
+
+A trained model is tightly coupled to its tokenizer.
+
+The tokenizer defines token IDs:
 
 $$
-\text{Find } \mathcal{V} \text{ such that text can be efficiently encoded}
+\operatorname{ID}(t) = x
 $$
 
-But they optimize different proxies:
+The embedding table learns a vector for each ID:
 
-* **BPE** minimizes redundancy via frequency
-* **WordPiece** maximizes likelihood under a model
+$$
+E[x] \in \mathbb{R}^{1 \times d}
+$$
 
-Despite this difference, their outputs are often similar in practice.
+Changing the tokenizer changes the IDs, which changes the meaning of embedding lookup.
+
+> [!WARNING]
+> Tokenizers are not interchangeable after model training. A different tokenizer sends different IDs into the same embedding table, so the model receives a different language.
 
 ---
 
-## 7. Tokenization as a System Constraint
-
-A trained model is tightly coupled to its tokenizer:
-
-$$
-\text{Model} + \text{Tokenizer} = \text{One System}
-$$
-
-Changing the tokenizer changes:
-
-* token IDs
-* embedding lookup
-* input distribution
-
-Thus:
-
-* tokenizers are not interchangeable
-* even small changes can break model behavior
-
----
-
-## 8. Final Takeaways
+## 12. Summary
 
 ![](./img/tokenization-summary.jpg)
 
+BPE and WordPiece both learn subword vocabularies, but their merge criteria differ.
 
-1. Both BPE and WordPiece are **merge-based subword methods**
-2. BPE is **frequency-driven**; WordPiece is **likelihood-driven**
-3. Both construct a vocabulary of reusable text fragments
-4. The tokenizer defines the **interface between raw text and the model**
+The central comparison is:
+
+$$
+\boxed{
+\text{BPE: frequent pairs}
+\qquad
+\text{WordPiece: useful likelihood-oriented pieces}
+}
+$$
+
+Both methods solve the same practical problem: represent open-ended text with a fixed, manageable vocabulary.

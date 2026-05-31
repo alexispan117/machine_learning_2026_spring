@@ -1,87 +1,217 @@
-# Tokenization Granularity: The Discrete Interface of Transformers
+# Tokenization Granularity
 
-Online Tokenizer visualization:
+Tokenization granularity controls how much text each token represents. The main trade-off is coverage versus efficiency.
+
+Online tokenizer visualization:
+
 - https://tiktokenizer.vercel.app/
 
+Online resource:
 
-Online resources:
 - https://huggingface.co/learn/llm-course/en/chapter6/5
-
-
-
 
 ---
 
 ## 1. The Granularity Spectrum
 
-The fundamental challenge in tokenization is finding the right unit of analysis. We balance **Coverage** (the ability to represent any input) against **Efficiency** (the amount of information packed into a single sequence).
+At one extreme, every character or byte can be a token. At the other extreme, every word or phrase can be a token.
 
-### 2.1 Character-Level: The Universal Atom
-At this level, every single character (including spaces and punctuation) is a token.
-* **The Advantage:** Perfect coverage. Since the vocabulary is limited to the character set of a language (e.g., ~100 for English), there is no such thing as an "unknown" word. It is naturally robust to misspellings and new terminology.
-* **The Computational Tax:** Sequence length ($T$) explodes. Because Transformer attention scales quadratically $O(T^2)$, processing a character-level document is significantly more expensive than processing a word-level one. Furthermore, the model must "waste" layers learning that `c` + `a` + `t` represents a specific animal before it can begin high-level reasoning.
+Modern language models usually choose the middle: subword tokens.
 
-### 2.2 Word-Level: The Semantic Molecule
-Every space-separated word is treated as a unique token.
-* **The Advantage:** High semantic density. Each token carries a clear, human-interpretable meaning, and sequence lengths are short.
-* **The "Unknown" Crisis:** This approach suffers from the **Out-of-Vocabulary (OOV)** problem. Language is infinite; a word-level dictionary can never contain every name, technical term, or typo. Anything missing is mapped to a special `<unk>` token.
+The design question is:
 
-### 2.3 Subword-Level: The Modern Standard
-Subword tokenization (e.g., BPE, WordPiece, Unigram) decomposes frequent words into wholes and rare words into meaningful fragments.
-* **Example:** `unbelievable` $\to$ `un` + `believ` + `able`
-* **Synthesis:** It provides the best of both worlds: the efficiency of words for common text and the fallback safety of characters for rare text.
+$$
+\boxed{
+\text{How large should a reusable text unit be?}
+}
+$$
+
+The answer affects vocabulary size $V$, sequence length $T$, compute, robustness, and semantic structure.
 
 ---
 
-## 2. The Information Catastrophe of OOV
+## 2. Character-Level Tokenization
 
-The OOV problem in word-level tokenization is more than a technicality—it is a form of "information erasure."
+Character-level tokenization treats each character as a token.
 
-Consider a vocabulary that does not include specific names. In a word-level system:
-* `Alicia` $\to$ `<unk>`
-* `Alexander` $\to$ `<unk>`
-* `Alexandria` $\to$ `<unk>`
+Example:
 
-To the model, these three distinct entities are represented by the exact same ID. It cannot distinguish a person from a city or one name from another. In contrast, a subword tokenizer breaks them down:
-* `Alicia` $\to$ `Ali` + `cia`
-* `Alexander` $\to$ `Alex` + `ander`
-* `Alexandria` $\to$ `Alex` + `and` + `ria`
+```text
+Shanghai -> S h a n g h a i
+```
 
-The model can now see the shared `Alex` prefix and the distinct suffixes, allowing it to maintain identity and even infer grammatical or semantic relationships between similar strings.
+Strengths:
 
----
+- small vocabulary;
+- strong coverage;
+- robust to new words and typos;
+- simple to understand.
 
-## 3. Linguistic Divergence: English vs. Chinese
+Weaknesses:
 
-Tokenization is not "one size fits all." Different languages present different structural challenges.
+- long sequences;
+- expensive attention because of $O(T^2)$ scaling;
+- model must learn word-like patterns from many small units;
+- less efficient use of context length.
 
-| Feature | English (Alpha-Phonetic) | Chinese (Logographic) |
-| :--- | :--- | :--- |
-| **Boundary** | Clear (Whitespace) | Ambiguous (No spaces) |
-| **Morphology** | High (Prefixes/Suffixes) | Low (Root-based) |
-| **OOV Risk** | High for new words | Low (Characters are semantic) |
-| **Avg. Chars/Token** | ~4.0 - 4.5 | ~1.5 - 2.0 |
-
-In English, tokenization focuses on stripping suffixes (like `-ing` or `-ed`). In Chinese, the tokenizer must perform **segmentation**. Because there are no spaces, the same sequence of characters can often be split in multiple ways, and the choice of split drastically changes the model's representation of the meaning.
+Character-level tokenization is universal, but it asks the model to do more work.
 
 ---
 
-## 4. Measuring Efficiency: The "Chars per Token" Metric
+## 3. Byte-Level Tokenization
 
-The efficiency of a tokenizer is often measured by its compression ratio. We define **Average Characters per Token (CPT)** as:
+Byte-level tokenization starts from bytes rather than characters.
 
-$$CPT = \frac{\text{Total Characters in Corpus}}{\text{Total Tokens in Corpus}}$$
+With a byte vocabulary, any text that can be encoded as bytes can be represented. This is useful for:
 
-* **Low CPT (~1.0):** Indicates a character-level or very fine-grained subword tokenizer. This wastes the context window and increases compute.
-* **High CPT (>5.0):** Indicates a word-level or coarse tokenizer. This maximizes context but risks frequent OOV encounters.
+- multilingual text;
+- symbols;
+- unusual punctuation;
+- code;
+- noisy web text.
 
-For modern LLMs, the target is usually a "sweet spot" where common words are single tokens, but the model can still zoom in to the character level when it encounters something bizarre.
+Byte-level BPE, used by several GPT-style tokenizers, combines byte-level coverage with learned merges so common patterns become larger tokens.
+
+> [!INFO]
+> Byte-level tokenization is a practical coverage strategy. It avoids true unknown characters by falling back to bytes.
 
 ---
 
-## 5. Why Subwords Won the Transformer Era
+## 4. Word-Level Tokenization
 
-The shift to subword tokenization after 2017 was driven by two architectural realities of the Transformer:
+Word-level tokenization treats each word as a token.
 
-1.  **The Context Window is Finite:** We need to fit as much information as possible into the $N$ tokens of the context window. Word-level is best for this but breaks on rare words. Subword-level offers near-word efficiency with a 100% success rate on representation.
-2.  **Attention is Expensive:** By keeping sequence lengths manageable (shorter than character-level), subword tokenization keeps the $O(T^2)$ cost of the self-attention mechanism from becoming the primary bottleneck during training and inference.
+Example:
+
+```text
+I love Shanghai -> I love Shanghai
+```
+
+Strengths:
+
+- short sequences;
+- human-readable tokens;
+- each token often has clear semantic content.
+
+Weaknesses:
+
+- very large vocabulary;
+- severe out-of-vocabulary risk;
+- poor handling of names, typos, morphology, and code;
+- difficult multilingual coverage.
+
+Word-level tokenization is efficient when the vocabulary is complete, but natural language is open-ended.
+
+---
+
+## 5. Subword Tokenization
+
+Subword tokenization decomposes rare words while keeping frequent words or fragments intact.
+
+Example:
+
+```text
+unbelievable -> un believ able
+```
+
+Subword tokenization gives a practical compromise:
+
+- common words can remain single tokens;
+- rare words can be decomposed;
+- vocabulary size stays manageable;
+- sequence length stays shorter than character-level tokenization;
+- unknown-token collapse is reduced or avoided.
+
+This is why subword tokenization became the standard choice for transformer language models.
+
+---
+
+## 6. Out-of-Vocabulary Collapse
+
+Out-of-vocabulary collapse happens when many different strings map to the same unknown token.
+
+In a word-level tokenizer:
+
+```text
+Pudong -> <unk>
+Xuhui -> <unk>
+ShanghaiTech -> <unk>
+```
+
+The model receives the same ID for distinct objects.
+
+In a subword tokenizer, these strings can be decomposed into known pieces. Even if the split is imperfect, the model receives more information than a single unknown token.
+
+---
+
+## 7. Language Differences
+
+Tokenization is not one-size-fits-all.
+
+English has visible word spaces, but it also has morphology:
+
+- prefixes;
+- suffixes;
+- compounds;
+- inflections.
+
+Chinese does not mark word boundaries with spaces, so tokenization often involves segmentation. Some languages have rich inflection, productive compounding, or writing systems that make simple whitespace splitting unreliable.
+
+The tokenizer must fit the language mixture in the training data.
+
+> [!WARNING]
+> A tokenizer trained mostly on one language can be inefficient or unfairly costly for another language. More tokens for the same content means less effective context and more compute.
+
+---
+
+## 8. Measuring Efficiency
+
+A simple efficiency metric is average characters per token:
+
+$$
+\boxed{
+\mathrm{CPT}
+=
+\frac{\text{number of characters in the corpus}}
+{\text{number of tokens in the corpus}}
+}
+$$
+
+Low $\mathrm{CPT}$ means the tokenizer uses many tokens per character span. High $\mathrm{CPT}$ means each token covers more characters on average.
+
+This metric is useful, but it is incomplete. A good tokenizer should also preserve meaningful structure and avoid systematic inefficiency for important data types.
+
+---
+
+## 9. The Main Trade-Off
+
+| Granularity | Coverage | Efficiency | Main Use |
+| --- | --- | --- | --- |
+| Character | Very high | Low | Simple universality |
+| Byte | Very high | Low to medium | Robust open-world text |
+| Word | Low to medium | High | Closed vocabularies |
+| Subword | High | Medium to high | Modern LLMs |
+
+The practical goal is a tokenizer that:
+
+- represents any input;
+- keeps $T$ manageable;
+- keeps $V$ manageable;
+- handles rare and multilingual text reasonably;
+- supports the model's training objective.
+
+---
+
+## 10. Summary
+
+Tokenization granularity controls the balance between vocabulary size and sequence length.
+
+The central lesson is:
+
+$$
+\boxed{
+\text{fine tokens improve coverage, coarse tokens improve efficiency}
+}
+$$
+
+Subword tokenization wins because it balances both pressures.
