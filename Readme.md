@@ -67,6 +67,8 @@ Final exam will take place on one of the days of the two weeks of exam weeks.
 
 Duration: 2 hours.
 
+![](./img/exam.jpg)
+
 
 ### Distribution of notes
 The distribution of notes is as follows:
