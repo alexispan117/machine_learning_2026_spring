@@ -173,8 +173,7 @@ class AutoEncoder(nn.Module):
         self.decoder = nn.Sequential(
             nn.Linear(latent_dim, 128),
             nn.ReLU(),
-            nn.Linear(128, 784),
-            nn.Sigmoid(),
+            nn.Linear(128, 784)
         )
 
     def forward(self, x):
