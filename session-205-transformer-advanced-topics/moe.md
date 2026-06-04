@@ -2,8 +2,6 @@
 
 ![](./img-moe/moe.jpg)
 
-https://huggingface.co/blog/moe
-
 ---
 
 ## 1. Motivation: Why Dense Models Become Expensive
