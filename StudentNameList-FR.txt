@@ -19,9 +19,7 @@ Charles VINARDI	M	26D61110
 Leonard CHEMLA	M	26D61202 *
 Marc BRAVET	M	26D61139
 Mélanie FU	F	26D61118
-Paul SCHNEIDER	M	26D61224 (changing to another course?)
 Robin BRICHE	M	26D61111
-Victor MORIVAL	M	26D61181 (changing to another course?)
 Camille VIGNAL	M	26D61145 **
 Malika LAHLOU	F	26D61114
 
